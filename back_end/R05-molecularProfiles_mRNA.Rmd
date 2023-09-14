@@ -1,0 +1,244 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table",
+                 "ggpubr", "patchwork",
+                 "snowfall")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+# load data
+```{r}
+load(file = "Output/Steps/R01/ccle_exp_leu_v1.Rda")
+load(file = "Output/Steps/R01/ccle_drug_leu_v1.Rda")
+load(file = "Output/Steps/R01/gdsc_exp_leu_v1.Rda")
+load(file = "Output/Steps/R01/gdsc_drug_leu_v1.Rda")
+colnames(gdsc_exp_leu) <- gsub("-", "", colnames(gdsc_exp_leu))
+```
+
+```{r}
+tmp$rownames <- rownames(gdsc_exp_leu)
+gdsc_exp_leu <- as.data.frame(apply(gdsc_exp_leu, 2, as.numeric))
+rownames(gdsc_exp_leu) <- tmp$rownames
+```
+
+
+```{r}
+source("Function.R")
+```
+
+# GDSC1
+```{r}
+gdsc1_exp <- preContinuous(gdsc_exp_leu, gdsc1_drug_leu)[[1]]
+gdsc1_drug <- preContinuous(gdsc_exp_leu, gdsc1_drug_leu)[[2]]
+```
+
+## all
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+gdsc1_exp_re_df <- calSigpairs(gdsc1_exp, gdsc1_drug)
+gdsc1_exp_re_df_sig <- gdsc1_exp_re_df[gdsc1_exp_re_df$p < .001,]
+rownames(gdsc1_exp_re_df_sig) <- NULL
+# sfStop()
+```
+
+```{r}
+cor.test(as.numeric(gdsc1_exp$ABCC6), gdsc1_drug$`(5Z)-7-OXOZEAENOL`)
+```
+
+```{r}
+df1 <- data.frame(
+  genes = as.numeric(gdsc1_exp$SLITRK4),
+  drugs = gdsc1_drug$`(5Z)-7-OXOZEAENOL`
+)
+```
+
+
+plot:
+```{r}
+ggscatter(df1, x = "genes", y = "drugs") + 
+  stat_cor() + stat_smooth(method = "lm") + theme_bw()
+```
+
+## subtypes
+```{r}
+table(gdsc_anno_leu$lineage_subtype)
+```
+
+
+```{r}
+subtypes <- "AML"
+gdsc_anno_leu2 <- gdsc_anno_leu[gdsc_anno_leu$lineage_subtype %in% subtypes,]
+```
+
+```{r}
+gdsc1_drug2 <- gdsc1_drug[rownames(gdsc1_drug) %in% gdsc_anno_leu2$Name2,]
+gdsc1_exp2 <- gdsc1_exp[match(rownames(gdsc1_drug2), rownames(gdsc1_exp)),]
+```
+
+Filter drugs with too many NAs:
+```{r}
+gdsc1_drug2 <- gdsc1_drug2[,apply(gdsc1_drug2,2,function(x) sum(is.na(x))) < 0.6*nrow(gdsc1_drug2)]
+```
+
+```{r}
+re2 <- lapply(1:ncol(gdsc1_drug2), function(x){
+  drugs <- gdsc1_drug[,x]
+  re <- lapply(1:ncol(gdsc1_exp), function(y){
+      genes <- gdsc1_exp[,y]
+      re <- cor.test(as.numeric(genes), drugs)
+      re <- data.frame(
+        p = re$p.value,
+        R = re$estimate
+      ) 
+      return(re)
+  }
+  )
+  re <- do.call("rbind", re)
+  rownames(re) <- colnames(gdsc1_exp)
+  return(re)
+})
+```
+
+```{r}
+df2 <- data.frame(
+  genes = as.numeric(gdsc1_exp2$SLITRK4),
+  drugs = gdsc1_drug2$`(5Z)-7-OXOZEAENOL`
+)
+```
+
+plot:
+```{r}
+ggscatter(df2, x = "genes", y = "drugs") + 
+  stat_cor()
+```
+
+# GDSC2
+```{r}
+gdsc2_exp <- preContinuous(gdsc_exp_leu, gdsc2_drug_leu)[[1]]
+gdsc2_drug <- preContinuous(gdsc_exp_leu, gdsc2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+gdsc2_exp_re_df <- calSigpairs(ctrp1_exp, ctrp1_drug)
+gdsc2_exp_re_df_sig <- gdsc2_exp_re_df[gdsc2_exp_re_df$p < .001,]
+```
+
+# CTRP1
+```{r}
+ctrp1_exp <- preContinuous(ccle_exp_leu, ctrp1_drug_leu)[[1]]
+ctrp1_drug <- preContinuous(ccle_exp_leu, ctrp1_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp1_exp_re_df <- calSigpairs(ctrp1_exp, ctrp1_drug)
+ctrp1_exp_re_df_sig <- ctrp1_exp_re_df[ctrp1_exp_re_df$p < .001,]
+```
+
+
+# CTRP2
+```{r}
+ctrp2_exp <- preContinuous(ccle_exp_leu, ctrp2_drug_leu)[[1]]
+ctrp2_drug <- preContinuous(ccle_exp_leu, ctrp2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp2_exp_re_df <- calSigpairs(ctrp2_exp, ctrp2_drug)
+ctrp2_exp_re_df_sig <- ctrp2_exp_re_df[ctrp2_exp_re_df$p < .001,]
+```
+
+# beatAML
+```{r}
+load(file = "Output/Steps/R01/beatAML_drug_leu_v1.Rda")
+load(file = "Output/Steps/R01/beatAML_exp_leu_v1.Rda")
+```
+
+```{r}
+beatAML_exp <- preContinuous(as.data.frame(beatAML_exp_leu), as.data.frame(beatAML_drug_leu))[[1]]
+beatAML_drug <- preContinuous(as.data.frame(beatAML_exp_leu), as.data.frame(beatAML_drug_leu))[[2]]
+```
+
+# Tavor
+```{r}
+load(file = "Output/Steps/R01/tavor_drug_leu_v1.Rda")
+load(file = "Output/Steps/R01/tavor_exp_leu_v1.Rda")
+```
+
+```{r}
+tavor_exp <- preContinuous(as.data.frame(tavor_exp_leu), as.data.frame(tavor_drug_leu))[[1]]
+tavor_drug <- preContinuous(as.data.frame(tavor_exp_leu), as.data.frame(tavor_drug_leu))[[2]]
+```
+
+# Save
+Each:
+```{r}
+saveRDS(gdsc1_exp_re_df,
+     file = "Output/Steps/R05/gdsc1_exp_re_df.Rds")
+
+saveRDS(gdsc2_exp_re_df,
+     file = "Output/Steps/R05/gdsc2_exp_re_df.Rds")
+
+saveRDS(ctrp1_exp_re_df,
+     file = "Output/Steps/R05/ctrp1_exp_re_df.Rds")
+
+saveRDS(ctrp2_exp_re_df,
+     file = "Output/Steps/R05/ctrp2_exp_re_df.Rds")
+```
+
+Sig:
+```{r}
+save(
+    gdsc1_exp_re_df_sig,
+    gdsc2_exp_re_df_sig,
+    ctrp1_exp_re_df_sig,
+    ctrp2_exp_re_df_sig,
+    file = "Output/Steps/R05/shiny/exp_sig_all_df.Rda"
+)
+```
+
+shiny plot:
+```{r}
+gdsc2_expdrugs <- gdsc2_drug
+save(gdsc2_exp,
+     gdsc2_expdrugs, file = "Output/Steps/R05/shiny/gdsc2_exp_df.Rda")
+
+gdsc1_expdrugs <- gdsc1_drug
+save(gdsc1_exp,
+     gdsc1_expdrugs, file = "Output/Steps/R05/shiny/gdsc1_exp_df.Rda")
+
+ctrp2_expdrugs <- ctrp2_drug
+save(ctrp2_exp,
+     ctrp2_expdrugs, file = "Output/Steps/R05/shiny/ctrp2_exp_df.Rda")
+
+ctrp1_expdrugs <- ctrp1_drug
+save(ctrp1_exp,
+     ctrp1_expdrugs, file = "Output/Steps/R05/shiny/ctrp1_exp_df.Rda")
+
+tavor_expdrugs <- tavor_drug
+save(tavor_exp,
+     tavor_expdrugs, file = "Output/Steps/R05/shiny/tavor_exp_df.Rda")
+
+beatAML_expdrugs <- beatAML_drug
+save(beatAML_exp,
+     beatAML_expdrugs, file = "Output/Steps/R05/shiny/beatAML_exp_df.Rda")
+```
+
+```{r}
+save(gdsc2_exp,
+     gdsc2_expdrugs,
+     gdsc1_exp,
+     gdsc1_expdrugs,
+     ctrp2_exp,
+     ctrp2_expdrugs,
+     ctrp1_exp,
+     ctrp1_expdrugs,
+     tavor_exp,
+     tavor_expdrugs,
+     beatAML_exp,
+     beatAML_expdrugs,
+     file = "Output/Steps/R05/shiny/merged/merged_exp_df.Rda")
+```
+

@@ -1,0 +1,87 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table",
+                 "ggpubr", "patchwork",
+                 "snowfall")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+# load data
+```{r}
+load(file = "Output/Steps/R01/ccle_meth_leu_v1.Rda")
+load(file = "Output/Steps/R01/ccle_drug_leu_v1.Rda")
+```
+
+```{r}
+source("Function.R")
+```
+
+# CTRP1
+```{r}
+ctrp1_meth <- preContinuous(ccle_meth_leu, ctrp1_drug_leu)[[1]]
+ctrp1_drug <- preContinuous(ccle_meth_leu, ctrp1_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp1_meth_re_df <- calSigpairs(ctrp1_meth, ctrp1_drug)
+ctrp1_meth_re_df_sig <- ctrp1_meth_re_df[ctrp1_meth_re_df$p < .001,]
+```
+
+
+# CTRP2
+```{r}
+ctrp2_meth <- preContinuous(ccle_meth_leu, ctrp2_drug_leu)[[1]]
+ctrp2_drug <- preContinuous(ccle_meth_leu, ctrp2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp2_meth_re_df <- calSigpairs(ctrp2_meth, ctrp2_drug)
+ctrp2_meth_re_df_sig <- ctrp2_meth_re_df[ctrp2_meth_re_df$p < .001,]
+```
+
+# Plot
+```{r}
+plotCor(ctrp2_meth, ctrp2_drug,"EFNA2_19_1285152_1286152",
+        "SR8278")
+```
+
+
+# Save
+```{r}
+saveRDS(ctrp1_meth_re_df,
+     file = "Output/Steps/R06/ctrp1_meth_re_df.Rds")
+
+saveRDS(ctrp2_meth_re_df,
+     file = "Output/Steps/R06/ctrp2_meth_re_df.Rds")
+```
+
+```{r}
+save(
+  ctrp1_meth_re_df_sig,
+  ctrp2_meth_re_df_sig,
+  file = "Output/Steps/R06/shiny/meth_sig_all_df.Rda"
+)
+```
+
+shiny plot:
+```{r}
+ctrp2_methdrugs <- ctrp2_drug
+save(ctrp2_meth,
+     ctrp2_methdrugs, file = "Output/Steps/R06/shiny/ctrp2_meth_df.Rda")
+
+ctrp1_methdrugs <- ctrp1_drug
+save(ctrp1_meth,
+     ctrp1_methdrugs, file = "Output/Steps/R06/shiny/ctrp1_meth_df.Rda")
+```
+
+```{r}
+save(ctrp1_meth,
+     ctrp1_methdrugs,
+     ctrp2_meth,
+     ctrp2_methdrugs, file = "Output/Steps/R06/shiny/merged/merged_meth_df.Rda"
+)
+```
+

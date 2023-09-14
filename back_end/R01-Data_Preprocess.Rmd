@@ -1,0 +1,1081 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table", "readxl",
+                 "plyr",
+                 "PharmacoGx")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+# GDSC
+## Cell anno
+```{r}
+gdsc_anno <- read_xlsx("Input/Datasets/GDSC/CellLineInfo.xlsx", sheet = 2)
+gdsc_anno <- na.omit(gdsc_anno)
+colnames(gdsc_anno) <- c("Barcode", "Source1", "Source2", "Name")
+gdsc_anno$Barcode <- paste0("COSMIC_", gdsc_anno$Barcode)
+
+table(gdsc_anno$Source1)
+table(gdsc_anno$Source2)
+```
+
+Select leukemia-related cell lines:
+```{r}
+gdsc_anno2 <- gdsc_anno[gdsc_anno$Source1 %in% "leukemia",]
+
+# gdsc_anno3 <- gdsc_anno2[gdsc_anno2$Barcode %in% colnames(gdsc_exp),]
+```
+
+```{r}
+gdsc_anno_leu <- gdsc_anno2
+```
+
+## mRNA
+```{r}
+# Exp
+gdsc_exp <- fread("Input/Datasets/GDSC/Cell_line_RMA_proc_basalExp.txt")
+gdsc_exp <- as.data.frame(gdsc_exp)
+gdsc_exp <- aggregate(.~GENE_SYMBOLS,max,data=gdsc_exp)
+gdsc_exp[gdsc_exp$GENE_SYMBOLS %in% "",]$GENE_title
+gdsc_exp[gdsc_exp$GENE_SYMBOLS %in% "",]$GENE_SYMBOLS <- "ZNF286A"
+
+gdsc_exp$GENE_title <- NULL
+rownames(gdsc_exp) <- gdsc_exp$GENE_SYMBOLS; gdsc_exp$GENE_SYMBOLS <- NULL
+colnames(gdsc_exp) <- gsub("DATA.", "COSMIC_", colnames(gdsc_exp))
+gdsc_exp[1:5,1:5]
+```
+
+
+```{r}
+gdsc_exp_leu <- gdsc_exp[,colnames(gdsc_exp) %in% gdsc_anno_leu$Barcode]
+```
+
+```{r}
+gdsc_anno_leu2 <- gdsc_anno_leu[match(colnames(gdsc_exp_leu), 
+                                      gdsc_anno_leu$Barcode),]
+colnames(gdsc_exp_leu) <- gdsc_anno_leu2$Name
+```
+
+
+## Mut
+```{r}
+gdsc_omics <- readRDS("Input/Datasets/GDSC/gdsc_omics.Rds")
+
+gdsc_mut <- gdsc_omics$mutation_exome@assays@data$exprs
+
+gdsc_mut_leu <- as.data.frame(gdsc_mut[,colnames(gdsc_mut) %in% gdsc_anno_leu$Name])
+gdsc_mut_leu$genes <- rownames(gdsc_mut_leu)
+gdsc_mut_leu <- gather(data = gdsc_mut_leu,
+                     key = cells,
+                     value = mutation,
+                     - genes)
+gdsc_mut_leu <- gdsc_mut_leu[!gdsc_mut_leu$mutation %in% "wt",]
+```
+
+## CNV
+```{r}
+gdsc_cnv <- gdsc_omics$cnv@assays@data$exprs
+
+gdsc_cnv_leu <- as.data.frame(gdsc_cnv[,colnames(gdsc_cnv) %in% gdsc_anno_leu$Name])
+```
+
+## fusion
+```{r}
+gdsc_fusion <- gdsc_omics$fusion@assays@data$exprs
+gdsc_fusion_leu <- as.data.frame(gdsc_fusion[,colnames(gdsc_fusion) %in% gdsc_anno_leu$Name])
+gdsc_fusion_leu$genes <- rownames(gdsc_fusion_leu)
+gdsc_fusion_leu <- gather(data = gdsc_fusion_leu,
+                     key = cells,
+                     value = fusion,
+                     - genes)
+gdsc_fusion_leu <- na.omit(gdsc_fusion_leu)
+gdsc_fusion_leu <- gdsc_fusion_leu[!gdsc_fusion_leu$fusion %in% "wt",]
+gdsc_fusion_leu$fusion <- NULL
+colnames(gdsc_fusion_leu)[1] <- "fusion"
+```
+
+## Drugs
+```{r}
+gdsc_drug_raw <- fread("Input/Datasets/GDSC/sanger-dose-response.csv")
+gdsc_drug <- gdsc_drug_raw[,c(
+                          "DATASET",
+                          "COSMIC_ID",
+                          "DRUG_NAME",
+                          "auc")]
+gdsc_drug <- as.data.frame(gdsc_drug)
+gdsc_drug$COSMIC_ID <- paste0("COSMIC_", gdsc_drug$COSMIC_ID)
+```
+
+```{r}
+table(gdsc_anno_leu$Barcode %in% gdsc_drug$COSMIC_ID)
+```
+
+Select leukemia:
+```{r}
+gdsc_drug_leu <- gdsc_drug[gdsc_drug$COSMIC_ID %in% gdsc_anno_leu$Barcode,]
+```
+
+Split GDSC1, GDSC2:
+```{r}
+table(gdsc_drug_leu$DATASET)
+```
+
+```{r}
+gdsc1_drug_leu <- gdsc_drug_leu[gdsc_drug_leu$DATASET %in% "GDSC1",]
+gdsc1_drug_leu$DATASET <- NULL
+gdsc1_drug_leu <- dcast(data.table(gdsc1_drug_leu), COSMIC_ID~DRUG_NAME,
+                 value.var="auc", fun.aggregate = max, fill = NA)
+
+gdsc2_drug_leu <- gdsc_drug_leu[gdsc_drug_leu$DATASET %in% "GDSC2",]
+gdsc2_drug_leu$DATASET <- NULL
+gdsc2_drug_leu <- dcast(data.table(gdsc2_drug_leu), COSMIC_ID~DRUG_NAME,
+                 value.var="auc", fun.aggregate = max, fill = NA)
+```
+
+```{r}
+changeName <- function(df1, df2, col1, col2){
+  df1 <- as.data.frame(df1); df2 <- as.data.frame(df2)
+  df2 <- df2[match(df1[, col1], df2[, col1]),]
+  df1[,col1] <- df2[,col2]
+  return(df1)
+}
+```
+
+```{r}
+gdsc_anno_leu$Name2 <- gsub("-", "", gdsc_anno_leu$Name)
+
+# GDSC
+gdsc_anno_leu$COSMIC_ID <- gdsc_anno_leu$Barcode
+gdsc1_drug_leu <- changeName(df1 = gdsc1_drug_leu,
+                              df2 = gdsc_anno_leu,
+                              col1 = "COSMIC_ID",
+                              col2 = "Name2")
+gdsc2_drug_leu <- changeName(df1 = gdsc2_drug_leu,
+                              df2 = gdsc_anno_leu,
+                              col1 = "COSMIC_ID",
+                              col2 = "Name2")
+```
+
+## Drugs anno
+```{r}
+# gdsc_drug_anno <- gdsc_drug_raw[,c("DATASET",
+#                                "DRUG_NAME",
+#                                "DRUG_ID")]
+# gdsc_drug_anno <- unique(gdsc_drug_anno)
+# gdsc_drug_anno <- gdsc_drug_anno[!gdsc_drug_anno$DRUG_NAME %in% "",]
+```
+
+## Cell anno
+add cell line anno info ref by ccle:
+```{r}
+# ccle_anno_leu
+gdsc_anno_leu2 <- merge(gdsc_anno_leu,
+                       ccle_anno_leu[,c(2,6,7)], by.x = "Name2",
+                       by.y = "stripped_cell_line_name", all.x = T)
+# fwrite(gdsc_anno_leu2, file = "Output/Steps/R04/gdsc_anno_leu2.csv")
+
+gdsc_anno_leu <- fread("Output/Steps/R04/gdsc_anno_leu2.csv")
+```
+
+```{r}
+gdsc_anno_leu[gdsc_anno_leu$lineage_subtype %in% c("hairy_cell_leukaemia", "hairy_cell_leukemia"),]$lineage_subtype <- "HCL"
+
+gdsc_anno_leu[gdsc_anno_leu$lineage_subtype %in% c("acute_biphenotypic_leukemia"),]$lineage_subtype <- "ABL"
+```
+
+
+# CCLE
+## Cell anno
+```{r}
+ccle_anno_raw <- fread("Input/Datasets/CCLE/sample_info.csv")
+ccle_anno <- ccle_anno_raw[,c(
+  "DepMap_ID",
+  "stripped_cell_line_name",
+  "primary_disease",
+  "Subtype",
+  "lineage",
+  "lineage_subtype",
+  "lineage_sub_subtype",
+  "lineage_molecular_subtype"
+)]
+```
+
+```{r}
+table(ccle_anno$primary_disease)
+```
+
+
+Select leukemia-related cell lines:
+```{r}
+ccle_anno_leu <- ccle_anno[ccle_anno$primary_disease %in% "Leukemia",]
+
+table(ccle_anno_leu$Subtype)
+```
+
+```{r}
+table(ccle_anno_leu$lineage_subtype)
+```
+
+```{r}
+ccle_anno_leu[ccle_anno_leu$lineage_subtype %in% c("hairy_cell_leukemia"),]$lineage_subtype <- "HCL"
+
+ccle_anno_leu[ccle_anno_leu$lineage_subtype %in% c("acute_biphenotypic_leukemia"),]$lineage_subtype <- "ABL"
+
+ccle_anno_leu[ccle_anno_leu$lineage_subtype %in% c("unspecified_leukemia"),]$lineage_subtype <- "ALL"
+```
+
+## mRNA
+```{r}
+ccle_exp_raw <- fread("Input/Datasets/CCLE/CCLE_expression.csv")
+ccle_exp <- as.data.frame(ccle_exp_raw)
+rownames(ccle_exp) <- ccle_exp$V1; ccle_exp$V1 <- NULL
+colnames(ccle_exp) <- gsub(" \\(\\d*.\\)", replacement = "", x = colnames(ccle_exp))
+ccle_exp <- as.data.frame(t(ccle_exp))
+```
+
+Select leukemia-related cell lines:
+```{r}
+ccle_exp_leu <- ccle_exp[,colnames(ccle_exp) %in% ccle_anno_leu$DepMap_ID]
+```
+
+```{r}
+ccle_anno_leu2 <- ccle_anno_leu[match(colnames(ccle_exp_leu), ccle_anno_leu$DepMap_ID),]
+colnames(ccle_exp_leu) <- ccle_anno_leu2$stripped_cell_line_name
+```
+
+## fusion
+```{r}
+ccle_fusion <- fread("Input/Datasets/CCLE/CCLE_fusions.csv")
+ccle_fusion_leu <- ccle_fusion[ccle_fusion$DepMap_ID %in% ccle_anno_leu$DepMap_ID,]
+ccle_fusion_leu <- unique(ccle_fusion_leu[,1:2])
+ccle_fusion_leu <- merge(ccle_fusion_leu,
+                         ccle_anno_leu[,c(1:2)],
+                         by = "DepMap_ID")
+```
+
+## miRNA
+```{r}
+ccle_miRNA <- fread("Input/Datasets/CCLE/CCLE_miRNA_20180525.gct")
+ccle_miRNA <- as.data.frame(ccle_miRNA)
+rownames(ccle_miRNA) <- ccle_miRNA$Description
+ccle_miRNA <- ccle_miRNA[,-c(1:2)]
+colnames(ccle_miRNA) <- gsub("_.*$", "", colnames(ccle_miRNA))
+```
+
+sel:
+```{r}
+ccle_miRNA_leu <- ccle_miRNA[,colnames(ccle_miRNA) %in% ccle_anno_leu$stripped_cell_line_name]
+```
+
+## Meth
+```{r}
+ccle_meth <- fread("Input/Datasets/CCLE/CCLE_RRBS_TSS_1kb_20180614.txt")
+ccle_meth <- as.data.frame(ccle_meth)
+rownames(ccle_meth) <- ccle_meth$TSS_id
+ccle_meth <- ccle_meth[,-c(1:7)]
+colnames(ccle_meth) <- gsub("_.*$", "", colnames(ccle_meth))
+```
+
+sel:
+```{r}
+ccle_meth_leu <- ccle_meth[,colnames(ccle_meth) %in% ccle_anno_leu$stripped_cell_line_name]
+```
+
+## Mut
+```{r}
+ccle_mut <- fread("Input/Datasets/CCLE/CCLE_mutations.csv")
+ccle_mut_leu <- ccle_mut[ccle_mut$DepMap_ID %in% ccle_anno_leu$DepMap_ID,]
+
+table(ccle_mut_leu$Variant_Classification)
+```
+
+## CNV
+```{r}
+ccle_cnv <- fread("Input/Datasets/CCLE/CCLE_copynumber_byGene_2013-12-03.txt")
+ccle_cnv <- as.data.frame(ccle_cnv)
+rownames(ccle_cnv) <- ccle_cnv$SYMBOL
+ccle_cnv <- ccle_cnv[,-c(1:5)]
+colnames(ccle_cnv) <- gsub("_.*$", "", colnames(ccle_cnv))
+
+ccle_cnv_leu <- ccle_cnv[,colnames(ccle_cnv) %in% ccle_anno_leu$stripped_cell_line_name]
+# tmp$ccle_anno_leu <- ccle_anno_leu[match(colnames(ccle_cnv_leu), ccle_anno_leu$DepMap_ID),]
+# colnames(ccle_cnv_leu) <- tmp$ccle_anno_leu$stripped_cell_line_name
+```
+
+## Protein
+```{r}
+ccle_protein <- fread("Input/Datasets/CCLE/CCLE_RPPA_20180123.csv")
+ccle_protein <- as.data.frame(ccle_protein)
+rownames(ccle_protein) <- ccle_protein$V1; ccle_protein$V1 <- NULL
+ccle_protein <- as.data.frame(t(ccle_protein))
+colnames(ccle_protein) <- gsub("_.*$", "", colnames(ccle_protein))
+
+ccle_protein_leu <- ccle_protein[,colnames(ccle_protein) %in% ccle_anno_leu$stripped_cell_line_name]
+```
+
+## Drugs
+### PRISM1
+
+### PRISM2
+```{r}
+# prism2_drug_raw <- fread("Input/Datasets/CCLE/secondary-screen-dose-response-curve-parameters.csv")
+# prism2_drug <- prism2_drug_raw[,c("depmap_id", "name", "auc")]
+# 
+# prism2_drug <- dcast(data.table(prism2_drug), depmap_id~name,
+#                  value.var="auc", fun.aggregate = max, fill = NA)
+# prism2_drug <- prism2_drug[-1,]
+# prism2_drug <- as.data.frame(prism2_drug)
+```
+
+Select leukemia:
+```{r}
+# prism2_drug_leu <- prism2_drug[prism2_drug$depmap_id %in% ccle_anno_leu$DepMap_ID,]
+```
+
+### CTRP1
+```{r}
+ctrp1_drug <- fread("Input/Datasets/CCLE/v10.D3.area_under_conc_curve.txt")
+
+ctrp1_drug_leu <- unique(ctrp1_drug)
+ctrp1_drug_leu <- merge(ctrp1_drug_leu,
+                        ccle_anno_leu[,c(1,2)],
+                        by.x = "ccl_name",
+                        by.y = "stripped_cell_line_name")
+ctrp1_drug_leu$ccl_name <- NULL
+
+ctrp1_drug_leu <- dcast(data.table(ctrp1_drug_leu), DepMap_ID~cpd_name, value.var="area_under_curve", fun.aggregate = max, fill = NA)
+```
+
+### CTRP2
+```{r}
+ctrp2_drug <- fread("Input/Datasets/CCLE/v21.data.auc_sensitivities.txt") 
+tmp$ctrp2_anno_ccl <- fread("Input/Datasets/CCLE/v21.meta.per_cell_line.txt") 
+tmp$ctrp2_anno_cpd <- fread("Input/Datasets/CCLE/v21.meta.per_compound.txt") 
+
+ctrp2_drug <- merge(ctrp2_drug, tmp$ctrp2_anno_ccl[,c(1,2)], by = "master_ccl_id")
+ctrp2_drug <- merge(ctrp2_drug, tmp$ctrp2_anno_cpd[,c(1,2)], by = "master_cpd_id")
+ctrp2_drug <- ctrp2_drug[,c(4,5,6)]
+ctrp2_drug <- unique(ctrp2_drug)
+ctrp2_drug_leu <- ctrp2_drug[ctrp2_drug$ccl_name %in% ccle_anno_leu$stripped_cell_line_name,]
+ctrp2_drug_leu <- merge(ctrp2_drug_leu,
+                        ccle_anno_leu[,c(1,2)],
+                        by.x = "ccl_name",
+                        by.y = "stripped_cell_line_name")
+ctrp2_drug_leu$ccl_name <- NULL
+
+ctrp2_drug_leu <- dcast(data.table(ctrp2_drug_leu), DepMap_ID~cpd_name, value.var="area_under_curve", fun.aggregate = max, fill = NA)
+```
+
+```{r}
+ctrp1_drug_leu <- changeName(df1 = ctrp1_drug_leu,
+                              df2 = ccle_anno_leu,
+                              col1 = "DepMap_ID",
+                              col2 = "stripped_cell_line_name")
+
+ctrp2_drug_leu <- changeName(df1 = ctrp2_drug_leu,
+                              df2 = ccle_anno_leu,
+                              col1 = "DepMap_ID",
+                              col2 = "stripped_cell_line_name")
+```
+
+
+# BeatAML
+```{r}
+availablePSets <- availablePSets()
+```
+
+```{r}
+# beatAML <- downloadPSet("BeatAML_2018")
+# 
+# saveRDS(beatAML, file = "Input/Datasets/BeatAML/BeatAML_2018.rds")
+```
+
+```{r}
+beatAML <- readRDS("Input/Datasets/BeatAML/BeatAML_2018.rds")
+```
+
+## anno
+```{r}
+beatAML_anno_leu <- beatAML@sample
+
+# Drug anno
+beatAML_druganno_leu <- beatAML@treatment
+```
+
+## mRNA
+```{r}
+beatAML_exp_leu <- as.data.frame(assay(beatAML@molecularProfiles$rnaseq.counts))
+beatAML_exp_leu$genes <- rownames(beatAML_exp_leu)
+beatAML_exp_leu$genes <- substr(beatAML_exp_leu$genes, 1, 15)
+
+genecode <- fread("Input/gencode.v22.annotation.gene.probeMap")
+genecode$id <- substr(genecode$id, 1, 15)
+beatAML_exp_leu <- merge(beatAML_exp_leu,
+                  genecode[,-c(3:6)],
+                  by.x = "genes",
+                  by.y = "id")
+beatAML_exp_leu$genes <- NULL
+beatAML_exp_leu <- aggregate(.~gene, 
+                             max, 
+                             data = beatAML_exp_leu)
+rownames(beatAML_exp_leu) <- beatAML_exp_leu$gene
+beatAML_exp_leu$gene <- NULL
+```
+
+## Mut
+```{r}
+beatAML_mut_leu <- as.data.frame(assay(beatAML@molecularProfiles$mutationall))
+beatAML_mut_leu$genes <- rownames(beatAML_mut_leu)
+
+beatAML_mut_leu <- gather(data = beatAML_mut_leu,
+                     key = cells,
+                     value = mutation,
+                     - genes)
+beatAML_mut_leu <- beatAML_mut_leu[!beatAML_mut_leu$mutation %in% "wt",]
+
+```
+
+## drugs
+```{r}
+beatAML_drug_leu <- beatAML@treatmentResponse$profiles
+beatAML_drug_leu$drug_names <- rownames(beatAML_drug_leu)
+beatAML_drug_leu$drug_names <- gsub("drugid.", "", beatAML_drug_leu$drug_names)
+beatAML_drug_leu$drug_names <- gsub("\\.Full\\d\\.\\d\\.\\d\\.\\d+$", "", beatAML_drug_leu$drug_names)
+beatAML_drug_leu$drug_names <- gsub(".", ":", beatAML_drug_leu$drug_names, fixed = T)
+beatAML_drug_leu <- separate(beatAML_drug_leu, col = drug_names, into = c("drug", "cell"),sep = ":")
+
+beatAML_drug_leu <- dcast(data.table(beatAML_drug_leu), cell~drug,
+                        value.var="aac_recomputed", fun.aggregate = max, fill = NA)
+```
+
+# Tavor
+```{r}
+# tavor <- downloadPSet("Tavor_2020")
+# saveRDS(tavor, file = "Input/Datasets/Tavor/Tavor_2020.rds")
+
+tavor <- readRDS("Input/Datasets/Tavor/Tavor_2020.rds")
+```
+
+## anno
+```{r}
+# anno
+tavor_anno <- tavor@sample
+tavor_anno_leu <- tavor_anno[!tavor_anno$Diagnosis %in% NA,]
+
+# Drug anno
+tavor_druganno_leu <- tavor@treatment
+```
+
+## mRNA
+```{r}
+tavor_exp <- as.data.frame(assay(tavor@molecularProfiles$rnaseq))
+tavor_exp <- as.data.frame(log2(tavor_exp + 1))
+tavor_exp_leu <- tavor_exp[,colnames(tavor_exp) %in% tavor_anno_leu$sampleid]
+```
+
+## drugs
+```{r}
+tavor_drug_leu <- tavor@treatmentResponse$profiles
+tavor_drug_leu$Molecule.Name <- substr(rownames(tavor_drug_leu),
+                                       1, 11)
+tavor_drug_leu$cell <- substr(
+  rownames(tavor_drug_leu),
+  15, 20
+)
+
+tavor_drug_leu <- merge(tavor_drug_leu,
+                        tavor_druganno_leu[,c(1,4)],
+                        by = "Molecule.Name")
+tavor_drug_leu <- tavor_drug_leu[!tavor_drug_leu$ic50_recomputed %in% Inf,]
+tavor_drug_leu <- dcast(data.table(tavor_drug_leu), cell~treatmentid,
+                        value.var="ic50_recomputed", fun.aggregate = max, fill = NA)
+tavor_drug_leu <- tavor_drug_leu[tavor_drug_leu$cell %in% tavor_anno_leu$sampleid,]
+```
+
+
+# gCSI
+```{r}
+# gCSI <- downloadPSet("gCSI_2019", timeout = 10000)
+# saveRDS(gCSI, file = "Input/Datasets/GCSI/gCSI_2019.Rds")
+
+gCSI <- readRDS("Input/Datasets/GCSI/gCSI_2019.Rds")
+```
+
+## anno
+```{r}
+# table(gCSI_anno_leu$sampleid %in% ccle_anno_leu$stripped_cell_line_name)
+# 
+# gCSI_anno_leu$sampleid[!gCSI_anno_leu$sampleid %in% ccle_anno_leu$stripped_cell_line_name]
+```
+
+```{r}
+gCSI_anno <- gCSI@sample
+gCSI_anno_leu <- gCSI_anno[grepl("leukemia", gCSI_anno$Cellosaurus.Disease.Type),]
+
+gCSI_anno_leu$old_name <- rownames(gCSI_anno_leu)
+tmp$gCSI_anno_leu <- gCSI_anno_leu
+gCSI_anno_leu$sampleid <- gsub(
+  "-", "", gCSI_anno_leu$sampleid
+)
+gCSI_anno_leu$sampleid <- gsub(
+  ";", "", gCSI_anno_leu$sampleid
+)
+gCSI_anno_leu$sampleid <- gsub(
+  " [Human leukemia]", "", gCSI_anno_leu$sampleid, fixed = T
+)
+gCSI_anno_leu$sampleid <- toupper(gCSI_anno_leu$sampleid)
+
+gCSI_anno_leu <- ccle_anno_leu[match(gCSI_anno_leu$sampleid,
+                                     ccle_anno_leu$stripped_cell_line_name),]
+gCSI_anno_leu[13,] <- list("ACH-000157",
+                        "A4/FUKUDA",
+                        "Leukemia",
+                        "Non-Hodgkin Lymphoma",
+                        "blood",
+                        "NHL",
+                        "b_cell",
+                        NA)
+gCSI_anno_leu[14,] <- list("CVCL_1860",
+                        "CCRFSB",
+                        "Leukemia",
+                        "Acute lymphoblastic leukemia",
+                        "blood",
+                        "ALL",
+                        "b_cell",
+                        NA)
+gCSI_anno_leu[17,] <- list("ACH-000995",
+                        "JURKAT",
+                        "Leukemia",
+                        "Acute Lymphoblastic Leukemia (ALL), T-cell",
+                        "blood",
+                        "ALL",
+                        "t_cell",
+                        NA)
+
+gCSI_anno_leu$old_names <- tmp$gCSI_anno_leu$old_name
+
+
+```
+
+```{r}
+# Drug anno
+gCSI_druganno_leu <- gCSI@treatment
+```
+
+## mRNA
+```{r}
+# gCSI_exp <- as.data.frame(assay(gCSI@molecularProfiles$Kallisto_0.46.1.rnaseq.counts))
+# tavor_exp <- as.data.frame(log2(tavor_exp + 1))
+# tavor_exp_leu <- tavor_exp[,colnames(tavor_exp) %in% tavor_anno_leu$sampleid]
+```
+
+## CNV
+```{r}
+gCSI_cnv <- as.data.frame(assay(gCSI@molecularProfiles$cnv))
+gCSI_cnv_leu <- gCSI_cnv[,colnames(gCSI_cnv) %in% gCSI_anno_leu$old_names]
+```
+
+## Mut
+```{r}
+gCSI_mut <- as.data.frame(assay(gCSI@molecularProfiles$mutation))
+gCSI_mut_leu <- gCSI_mut[,colnames(gCSI_mut) %in% gCSI_anno_leu$old_names]
+
+gCSI_mut_leu$genes <- rownames(gCSI_mut_leu)
+
+gCSI_mut_leu <- gather(data = gCSI_mut_leu,
+                     key = cells,
+                     value = mutation,
+                     - genes)
+gCSI_mut_leu <- gCSI_mut_leu[!gCSI_mut_leu$mutation %in% "wt",]
+gCSI_mut_leu <- gCSI_mut_leu[!is.na(gCSI_mut_leu$mutation),]
+```
+
+
+## drugs
+```{r}
+gCSI_drug <- gCSI@treatmentResponse$profiles
+gCSI_drug$label <- rownames(gCSI_drug)
+gCSI_drug <- separate(gCSI_drug, col = "label", into = c("cells", "drugs", "others"), sep = "_")
+gCSI_drug_leu <- gCSI_drug[gCSI_drug$cells %in% gCSI_anno_leu$old_names,]
+
+gCSI_drug_leu <- dcast(data.table(gCSI_drug_leu), cells~drugs,
+                        value.var="ic50_recomputed", fun.aggregate = max, fill = NA)
+```
+
+# FORALL
+## anno
+```{r}
+FORALL_anno <- read_xlsx("Input/Datasets/FORALL/cellanno.xlsx", sheet = 2)
+
+FORALL_anno_leu <- cbind.data.frame(
+  names = FORALL_anno$`Cell Line Name`,
+  types = "ALL"
+)
+
+# druganno
+FORALL_druganno_leu <- read_xlsx("Input/Datasets/FORALL/druganno.xlsx", sheet = 2)
+```
+
+## Fusion
+```{r}
+FORALL_fusion_leu <- as.data.frame(read_xlsx("Input/Datasets/FORALL/fusion.xlsx", sheet = 2))
+FORALL_fusion_leu <- FORALL_fusion_leu[-c(1:2),]
+```
+
+## Protein
+```{r}
+FORALL_protein_leu <- as.data.frame(read_xlsx("Input/Datasets/FORALL/protein.xlsx", sheet = 2))
+rownames(FORALL_protein_leu) <- FORALL_protein_leu$...1
+FORALL_protein_leu$...1 <- NULL
+```
+
+## Mut
+```{r}
+FORALL_mut_leu <- as.data.frame(fread("Input/Datasets/FORALL/mut.txt"))
+```
+
+## drugs
+```{r}
+FORALL_drug <- read_xlsx("Input/Datasets/FORALL/drugs.xlsx", sheet = 2)
+FORALL_drug_leu <- as.data.frame(FORALL_drug)
+rownames(FORALL_drug_leu) <- FORALL_drug_leu$...1
+FORALL_drug_leu$...1 <- NULL
+FORALL_drug_leu <- as.data.frame(t(FORALL_drug_leu))
+FORALL_drug_leu <- cbind.data.frame(cells = rownames(FORALL_drug_leu), FORALL_drug_leu)
+```
+
+# Drug Anno(GDSC)
+This steps were processed after R02.
+
+```{r}
+# drug_anno <- fread("Input/Datasets/Drug/Repurposing_Hub_export.txt")
+```
+
+## GDSC
+```{r}
+gdsc_drug_anno <- fread("Input/Datasets/Drug/gdsc_screened_compounds_rel_8.4.csv")
+gdsc_drug_anno$DRUG_ID <- NULL;gdsc_drug_anno$SCREENING_SITE <- NULL
+gdsc_drug_anno$DRUG_NAME2 <- toupper(gdsc_drug_anno$DRUG_NAME)
+
+gdsc_drug_anno <- unique(gdsc_drug_anno)
+```
+
+```{r}
+table(colnames(gdsc1_drug_leu2[-1]) %in% gdsc_drug_anno$DRUG_NAME2)
+
+table(colnames(gdsc2_drug_leu2[-1]) %in% gdsc_drug_anno$DRUG_NAME2)
+```
+
+```{r}
+head(colnames(gdsc1_drug_leu2[-1])[!colnames(gdsc1_drug_leu2[-1]) %in% gdsc_drug_anno$DRUG_NAME2], 3)
+```
+
+### Handle diff drug names
+gdsc:
+```{r}
+drug <- unique(c(colnames(gdsc1_drug_leu2[-1]),
+                 colnames(gdsc2_drug_leu2[-1])))
+
+drug1 <- drug[drug %in% gdsc_drug_anno$DRUG_NAME2]
+drug2 <- drug[!drug %in% gdsc_drug_anno$DRUG_NAME2]
+```
+
+```{r}
+drug2 <- data.frame(name = drug2,
+                    name1 = drug2)
+drug2 <- separate(drug2,col = name1, into = c("name1", "name2"),sep = ",")
+head(drug2)
+```
+
+```{r}
+table(drug2$name1 %in% gdsc_drug_anno$DRUG_NAME2)
+table(drug2$name2 %in% gdsc_drug_anno$DRUG_NAME2)
+```
+
+```{r}
+drug3 <- drug2[drug2$name1 %in% gdsc_drug_anno$DRUG_NAME2,]
+drug4 <- drug2[!drug2$name1 %in% gdsc_drug_anno$DRUG_NAME2,]
+```
+
+```{r}
+gdsc_drug_anno2 <- gdsc_drug_anno[,c(5,2)]
+```
+
+```{r}
+index <- sapply(drug4$name1, function(x){
+  which(grepl(x, gdsc_drug_anno2$SYNONYMS))
+})
+index <- index[!sapply(index, is_empty)]
+drug5 <- data.frame(index = unlist(index),
+                    name1 = names(index),
+                    old = drug4$name[drug4$name1 %in% names(index)])
+# index$V2 <- rownames(index)
+drug5$new <- gdsc_drug_anno2[drug5$index,]$DRUG_NAME2
+```
+
+```{r}
+drug6 <- drug4[!drug4$name %in% drug5$old,]
+drug6$new <- gsub("-", "", drug6$name1)
+```
+
+```{r}
+drug7 <- drug6[drug6$new %in% gdsc_drug_anno2$DRUG_NAME,]
+drug8 <- drug6[!drug6$new %in% gdsc_drug_anno2$DRUG_NAME,]
+```
+
+### Rename
+```{r}
+gdsc_drug_rename <- data.frame(
+  old = drug,
+  new = drug
+)
+
+# 1st
+identical(gdsc_drug_rename$new[gdsc_drug_rename$new %in% drug3$name],
+          drug3$name)
+gdsc_drug_rename$new[gdsc_drug_rename$new %in% drug3$name] <- drug3$name1
+```
+
+```{r}
+# 2ed
+identical(gdsc_drug_rename$new[gdsc_drug_rename$new %in% drug5$old],
+          drug5$old)
+gdsc_drug_rename$new[gdsc_drug_rename$new %in% drug5$old] <- drug5$new
+
+# 3rd
+gdsc_drug_rename$new[gdsc_drug_rename$new %in% drug7$name] <- drug7$new
+```
+
+### Reprocess anno files
+```{r}
+gdsc_drug_anno_split1 <- gdsc_drug_anno[gdsc_drug_anno$DRUG_NAME2 %in% gdsc_drug_rename$new,]
+gdsc_drug_anno_split1$DRUG_NAME <- NULL
+```
+
+```{r}
+table(gdsc_drug_rename$new %in% gdsc_drug_anno_split1$DRUG_NAME2)
+```
+
+```{r}
+gdsc_drug_anno_split2 <- data.frame(
+  DRUG_NAME2 = drug8$name
+)
+gdsc_drug_anno_split2$TARGET_PATHWAY <- c("Cell cycle",
+                                          "RTK signaling",
+                                          "EGFR signaling",
+                                          "EGFR signaling",
+                                          "mitosis",
+                                          "Other, kinases",
+                                          "RTK signaling",
+                                          "Apoptosis regulation",
+                                          "Cell cycle",
+                                          "hedgehog pathway",
+                                          "PI3K/MTOR signaling",
+                                          "Chromatin histone acetylation",
+                                          "Chromatin other",
+                                          "DNA replication",
+                                          "IGF1R signaling",
+                                          "Mitosis")
+gdsc_drug_anno_split1$SYNONYMS <- NULL
+gdsc_drug_anno_split1$TARGET <- NULL
+```
+
+```{r}
+gdsc_drug_anno <- rbind(gdsc_drug_anno_split2,
+                        gdsc_drug_anno_split1[,c(2,1)])
+```
+
+```{r}
+table(gdsc_drug_rename$new %in% gdsc_drug_anno$DRUG_NAME2)
+```
+
+```{r}
+gdsc_drug_anno <- unique(gdsc_drug_anno)
+dupli <- gdsc_drug_anno[gdsc_drug_anno$DRUG_NAME2 %in% gdsc_drug_anno$DRUG_NAME2[duplicated(gdsc_drug_anno$DRUG_NAME2)],]
+```
+
+# Rescale data
+```{r}
+source("Function.R")
+```
+
+
+```{r}
+# GDSC
+# load(file = "Output/Steps/R01/gdsc_drug_leu_v1.Rda")
+gdsc1_drug_leu <- rescaleMode1(gdsc1_drug_leu)
+gdsc2_drug_leu <- rescaleMode1(gdsc2_drug_leu)
+
+# CTRP
+# load(file = "Output/Steps/R01/ccle_drug_leu_v1.Rda")
+ctrp1_drug_leu <- rescaleMode1(ctrp1_drug_leu)
+ctrp2_drug_leu <- rescaleMode1(ctrp2_drug_leu)
+
+# Tavor
+# load(file = "Output/Steps/R01/tavor_drug_leu_v1.Rda")
+tavor_drug_leu <- rescaleMode1(tavor_drug_leu)
+
+# gCSI
+# load(file = "Output/Steps/R01/gCSI_drug_leu_v1.Rda")
+gCSI_drug_leu <- rescaleMode1(gCSI_drug_leu)
+```
+
+# Drug preprocess
+```{r}
+drugRename <- function(df){
+  # df <- ctrp1_drug_leu
+  rownames(df) <- df[,1]
+  df[,1] <- NULL
+  return(df)
+}
+ctrp1_drug <- drugRename(ctrp1_drug_leu)
+ctrp2_drug <- drugRename(ctrp2_drug_leu)
+gdsc1_drug <- drugRename(gdsc1_drug_leu)
+gdsc2_drug <- drugRename(gdsc2_drug_leu)
+FORALL_drug <- drugRename(FORALL_drug_leu)
+gCSI_drug <- as.data.frame(drugRename(gCSI_drug_leu))
+beatAML_drug <- drugRename(as.data.frame(beatAML_drug_leu))
+tavor_drug <- drugRename(tavor_drug_leu)
+```
+
+# Save
+## GDSC
+```{r}
+# save(
+#   gdsc_exp_leu,
+#   gdsc_anno_leu,
+#   gdsc1_drug_leu,
+#   gdsc2_drug_leu,
+#   gdsc_drug_anno,
+#   file = "Output/Steps/R01/gdsc_leu_v2.Rda")
+
+# exp
+save(
+  gdsc_exp_leu,
+  gdsc_anno_leu,
+  file = "Output/Steps/R01/gdsc_exp_leu_v1.Rda"
+)
+
+# fusion
+save(
+  gdsc_fusion_leu,
+  gdsc_anno_leu,
+  file = "Output/Steps/R01/gdsc_fusion_leu_v1.Rda"
+)
+
+# mut
+save(
+  gdsc_mut_leu,
+  gdsc_anno_leu,
+  file = "Output/Steps/R01/gdsc_mut_leu_v1.Rda"
+)
+
+# cnv
+save(
+  gdsc_cnv_leu,
+  gdsc_anno_leu,
+  file = "Output/Steps/R01/gdsc_cnv_leu_v1.Rda"
+)
+
+# drug
+save(
+  gdsc1_drug_leu,
+  gdsc2_drug_leu,
+  gdsc_drug_anno,
+  gdsc_anno_leu,
+  file = "Output/Steps/R01/gdsc_drug_leu_v1.Rda"
+)
+```
+
+## CCLE
+```{r}
+# save(
+#   ccle_exp_leu,
+#   ccle_anno_leu,
+#   ctrp1_drug_leu,
+#   ctrp2_drug_leu,
+#   file = "Output/Steps/R01/ccle_leu_v1.Rda")
+
+# exp
+save(
+  ccle_exp_leu,
+  ccle_anno_leu,
+  file = "Output/Steps/R01/ccle_exp_leu_v1.Rda"
+)
+
+# meth
+save(
+  ccle_meth_leu,
+  ccle_anno_leu,
+  file = "Output/Steps/R01/ccle_meth_leu_v1.Rda"
+)
+
+# miRNA
+save(
+  ccle_miRNA_leu,
+  ccle_anno_leu,
+  file = "Output/Steps/R01/ccle_miRNA_leu_v1.Rda"
+)
+
+# fusion
+save(
+  ccle_fusion_leu,
+  ccle_anno_leu,
+  file = "Output/Steps/R01/ccle_fusion_leu_v1.Rda"
+)
+
+# mut
+save(
+  ccle_mut_leu,
+  ccle_anno_leu,
+  file = "Output/Steps/R01/ccle_mut_leu_v1.Rda"
+)
+
+# cnv
+save(
+  ccle_cnv_leu,
+  ccle_anno_leu,
+  file = "Output/Steps/R01/ccle_cnv_leu_v1.Rda"
+)
+
+# protein
+save(
+  ccle_protein_leu,
+  ccle_anno_leu,
+  file = "Output/Steps/R01/ccle_protein_leu_v1.Rda"
+)
+
+# drug
+save(
+  ctrp1_drug_leu,
+  ctrp2_drug_leu,
+  ccle_anno_leu,
+  file = "Output/Steps/R01/ccle_drug_leu_v1.Rda"
+)
+```
+
+GDSC Drug anno:
+```{r}
+save(gdsc_drug_anno,
+     gdsc_drug_rename,
+     file = "Output/Steps/R01/gdsc_drug_anno_v2.Rda")
+```
+
+## beatAML
+```{r}
+# exp
+save(
+  beatAML_exp_leu,
+  beatAML_anno_leu,
+  file = "Output/Steps/R01/beatAML_exp_leu_v1.Rda"
+)
+
+# mut
+save(
+  beatAML_mut_leu,
+  beatAML_anno_leu,
+  file = "Output/Steps/R01/beatAML_mut_leu_v1.Rda"
+)
+
+# drug
+save(
+  beatAML_drug_leu,
+  beatAML_anno_leu,
+  file = "Output/Steps/R01/beatAML_drug_leu_v1.Rda"
+)
+```
+
+## Tavor
+```{r}
+# exp
+save(
+  tavor_exp_leu,
+  tavor_anno_leu,
+  file = "Output/Steps/R01/tavor_exp_leu_v1.Rda"
+)
+
+# drug
+save(
+  tavor_drug_leu,
+  tavor_anno_leu,
+  file = "Output/Steps/R01/tavor_drug_leu_v1.Rda"
+)
+```
+
+## gCSI
+```{r}
+# cnv
+save(
+  gCSI_cnv_leu,
+  gCSI_anno_leu,
+  file = "Output/Steps/R01/gCSI_cnv_leu_v1.Rda"
+)
+
+# mut
+save(
+  gCSI_mut_leu,
+  gCSI_anno_leu,
+  file = "Output/Steps/R01/gCSI_mut_leu_v1.Rda"
+)
+
+# drug
+save(
+  gCSI_drug_leu,
+  gCSI_anno_leu,
+  file = "Output/Steps/R01/gCSI_drug_leu_v1.Rda"
+)
+```
+
+## FORALL
+```{r}
+# fusion
+save(
+  FORALL_fusion_leu,
+  FORALL_anno_leu,
+  file = "Output/Steps/R01/FORALL_fusion_leu_v1.Rda"
+)
+
+# mut
+save(
+  FORALL_mut_leu,
+  FORALL_anno_leu,
+  file = "Output/Steps/R01/FORALL_mut_leu_v1.Rda"
+)
+
+# protein
+save(
+  FORALL_protein_leu,
+  FORALL_anno_leu,
+  file = "Output/Steps/R01/FORALL_protein_leu_v1.Rda"
+)
+
+# drug
+save(
+  FORALL_drug_leu,
+  FORALL_druganno_leu,
+  FORALL_anno_leu,
+  file = "Output/Steps/R01/FORALL_drug_leu_v1.Rda"
+)
+```
+
+## Drugs
+```{r}
+save(
+  ctrp1_drug,
+  ctrp2_drug,
+  gdsc1_drug,
+  gdsc2_drug,
+  FORALL_drug,
+  gCSI_drug,
+  beatAML_drug,
+  tavor_drug, file = "Output/Steps/R01/shiny/merged_drug_df.Rda"
+)
+```
+
+## Annos
+```{r}
+save(
+  ctrp1_drug
+)
+```
+

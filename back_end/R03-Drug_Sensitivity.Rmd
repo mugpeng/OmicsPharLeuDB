@@ -1,0 +1,1144 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table", 
+                 "plyr", "withr",
+                 "ggpubr", "patchwork", "plotly",
+                 "umap", "Rtsne", "FactoMineR", "factoextra",
+                 "impute")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+```{r}
+source("Function.R")
+```
+
+
+# load data
+```{r}
+load("Output/Steps/R01/ccle_drug_leu_v1.Rda")
+
+load("Output/Steps/R01/gdsc_drug_leu_v1.Rda")
+
+load(file = "Output/Steps/R01/beatAML_drug_leu_v1.Rda")
+
+load(file = "Output/Steps/R01/tavor_drug_leu_v1.Rda")
+
+load(file = "Output/Steps/R01/gCSI_drug_leu_v1.Rda")
+
+load(file = "Output/Steps/R01/FORALL_drug_leu_v1.Rda")
+```
+
+```{r}
+load("Output/Steps/R01/gdsc_drug_anno_v2.Rda")
+```
+
+```{r}
+drug_anno <- fread("Input/Datasets/Drug/Repurposing_Hub_export.txt")
+```
+
+# Preprocess
+```{r}
+ctrp1 <- ctrp1_drug_leu
+
+ctrp2 <- ctrp2_drug_leu
+
+gdsc1 <- gdsc1_drug_leu
+
+gdsc2 <- gdsc2_drug_leu
+
+beatAML <- beatAML_drug_leu
+
+gCSI <- gCSI_drug_leu
+
+tavor <- tavor_drug_leu
+
+FORALL <- FORALL_drug_leu
+```
+
+# Overall pharmaceutics(sd and median)
+## gdsc1
+```{r}
+gdsc_overall <- calSDandMedian(gdsc1)
+gdsc_overall$Drugs <- rownames(gdsc_overall)
+gdsc_overall <- merge(gdsc_overall,
+                      gdsc_drug_rename,
+                      by.x = "Drugs",
+                      by.y = "old")
+gdsc_overall <- merge(gdsc_overall,
+                      gdsc_drug_anno,
+                      by.x = "new",
+                      by.y = "DRUG_NAME2")
+tmp$dupli <- gdsc_overall$new[duplicated(gdsc_overall$new)]
+tmp$dupli
+```
+
+```{r}
+gdsc_overall <- gdsc_overall[-c(29,31),]
+gdsc_overall[30,]$TARGET_PATHWAY <- "IGF1R/RTK signaling"
+```
+
+```{r}
+gdsc1_overall <- gdsc_overall
+```
+
+
+```{r}
+p <- ggplot(data = gdsc1_overall, 
+            aes(x = SD, 
+                y = Median, label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=TARGET_PATHWAY)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv"))
+p
+```
+
+```{r}
+for_label_med <- gdsc_overall[order(gdsc_overall$Median),] %>% 
+  head(10)
+```
+
+
+```{r}
+p_gdsc1 <- p +
+  geom_point(size = 3, shape = 1, data = for_label_med) +
+  ggrepel::geom_label_repel(
+    aes(label = Drugs),
+    data = for_label_med,
+    color="black"
+  )
+p_gdsc1
+```
+
+```{r}
+p_sd_gdsc1 <- p
+```
+
+
+## gdsc2
+```{r}
+gdsc_overall <- calSDandMedian(gdsc2)
+gdsc_overall$Drugs <- rownames(gdsc_overall)
+gdsc_overall <- merge(gdsc_overall,
+                      gdsc_drug_rename,
+                      by.x = "Drugs",
+                      by.y = "old")
+gdsc_overall <- merge(gdsc_overall,
+                      gdsc_drug_anno,
+                      by.x = "new",
+                      by.y = "DRUG_NAME2")
+tmp$dupli <- gdsc_overall$new[duplicated(gdsc_overall$new)]
+tmp$dupli
+```
+
+```{r}
+gdsc_overall <- gdsc_overall[-c(15,20,31,45,51,86),]
+gdsc_overall$TARGET_PATHWAY[gdsc_overall$Drugs %in% c("DASATINIB",
+                                                      "GSK1904529A",
+                                                      "LAPATINIB",
+                                                      "SORAFENIB")] <- 
+  c("kinases & RTK signaling",
+    "IGF1R/RTK signaling",
+    "EGFR/RTK signaling",
+    "kinases & RTK signaling")
+```
+
+```{r}
+gdsc2_overall <- gdsc_overall
+```
+
+
+```{r}
+p <- ggplot(data = gdsc2_overall, 
+            aes(x = SD, 
+                y = Median,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=TARGET_PATHWAY)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv"))
+p
+```
+
+```{r}
+for_label_med <- gdsc_overall[order(gdsc_overall$Median),] %>% 
+  head(10)
+
+# for_label_sd <- gdsc_overall[order(gdsc_overall$SD, decreasing = T),] %>% 
+#   head(3)
+
+# for_label <- unique(rbind(for_label_med, for_label_sd))
+```
+
+
+```{r}
+p_gdsc2 <- p +
+  geom_point(size = 3, shape = 1, data = for_label_med) +
+  ggrepel::geom_label_repel(
+    aes(label = Drugs),
+    data = for_label_med,
+    color="black"
+  )
+p_gdsc2
+```
+
+```{r}
+p_sd_gdsc2 <- p
+```
+
+```{r}
+# p_gdsc <- p_gdsc1 + p_gdsc2
+# p_gdsc
+```
+
+## ctrp1
+```{r}
+ctrp_overall <- calSDandMedian(ctrp1)
+ctrp_overall$Drugs <- rownames(ctrp_overall)
+```
+
+```{r}
+table(ctrp_overall$Drugs %in% drug_anno$Name)
+```
+```{r}
+ctrp_overall1 <- merge(ctrp_overall,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+ctrp_overall2 <- ctrp_overall[!ctrp_overall$Drugs %in% drug_anno$Name,]
+ctrp_overall2$MOA <- "Unknown"
+
+ctrp1_overall <- rbind(ctrp_overall1,
+                       ctrp_overall2)
+```
+
+```{r}
+p <- ggplot(data = ctrp1_overall, 
+            aes(x = SD, 
+                y = Median,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("palettesForR::Web")) + theme(legend.position = "none")
+p
+```
+
+```{r}
+for_label_med <- ctrp1_overall[order(ctrp1_overall$Median),] %>% 
+  head(10)
+
+# for_label_sd <- gdsc_overall[order(gdsc_overall$SD, decreasing = T),] %>% 
+#   head(3)
+
+# for_label <- unique(rbind(for_label_med, for_label_sd))
+```
+
+
+```{r}
+p_ctrp1 <- p +
+  geom_point(size = 3, shape = 1, data = for_label_med) +
+  ggrepel::geom_label_repel(
+    aes(label = Drugs),
+    data = for_label_med,
+    color="black",
+    max.overlaps = Inf,
+    min.segment.length = 0
+  )
+p_ctrp1
+```
+
+```{r}
+p_sd_ctrp1 <- p
+```
+
+```{r}
+plotly::ggplotly(p_sd_ctrp1)
+```
+
+## ctrp2
+```{r}
+ctrp_overall <- calSDandMedian(ctrp2)
+ctrp_overall$Drugs <- rownames(ctrp_overall)
+```
+
+```{r}
+table(ctrp_overall$Drugs %in% drug_anno$Name)
+```
+```{r}
+ctrp_overall1 <- merge(ctrp_overall,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+ctrp_overall2 <- ctrp_overall[!ctrp_overall$Drugs %in% drug_anno$Name,]
+ctrp_overall2$MOA <- "Unknown"
+
+ctrp2_overall <- rbind(ctrp_overall1,
+                       ctrp_overall2)
+```
+
+```{r}
+p <- ggplot(data = ctrp2_overall, 
+            aes(x = SD, 
+                y = Median,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("palettesForR::Web")) + theme(legend.position = "none")
+p
+```
+
+```{r}
+for_label_med <- ctrp2_overall[order(ctrp2_overall$Median),] %>% 
+  head(10)
+
+# for_label_sd <- gdsc_overall[order(gdsc_overall$SD, decreasing = T),] %>% 
+#   head(3)
+
+# for_label <- unique(rbind(for_label_med, for_label_sd))
+```
+
+
+```{r}
+p_ctrp2 <- p +
+  geom_point(size = 3, shape = 1, data = for_label_med) +
+  ggrepel::geom_label_repel(
+    aes(label = Drugs),
+    data = for_label_med,
+    color="black",
+    max.overlaps = Inf,
+    min.segment.length = 0
+  )
+p_ctrp2
+```
+
+```{r}
+p_sd_ctrp2 <- p
+```
+
+## gCSI
+```{r}
+gCSI_overall <- calSDandMedian(gCSI)
+gCSI_overall$Drugs <- rownames(gCSI_overall)
+gCSI_overall <- na.omit(gCSI_overall)
+```
+
+```{r}
+gCSI_overall1 <- merge(gCSI_overall,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+gCSI_overall2 <- gCSI_overall[!gCSI_overall$Drugs %in% drug_anno$Name,]
+gCSI_overall2$MOA <- "Unknown"
+
+gCSI_overall <- rbind(gCSI_overall1,
+                       gCSI_overall2)
+```
+
+```{r}
+p <- ggplot(data = gCSI_overall, 
+            aes(x = SD, 
+                y = Median,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("palettesForR::Web")) + theme(legend.position = "none")
+p_sd_gCSI <- p
+p_sd_gCSI
+```
+
+## tavor
+```{r}
+tavor_overall <- calSDandMedian(tavor)
+tavor_overall$Drugs <- rownames(tavor_overall)
+tavor_overall <- na.omit(tavor_overall)
+```
+
+```{r}
+tavor_overall1 <- merge(tavor_overall,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+tavor_overall2 <- tavor_overall[!tavor_overall$Drugs %in% drug_anno$Name,]
+tavor_overall2$MOA <- "Unknown"
+
+tavor_overall <- rbind(tavor_overall1,
+                       tavor_overall2)
+```
+
+```{r}
+p <- ggplot(data = tavor_overall, 
+            aes(x = SD, 
+                y = Median,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("palettesForR::Web")) + theme(legend.position = "none")
+p_sd_tavor <- p
+p_sd_tavor
+```
+
+## BeatAML
+```{r}
+BeatAML_overall <- calSDandMedian(beatAML)
+BeatAML_overall$Drugs <- rownames(BeatAML_overall)
+BeatAML_overall <- na.omit(BeatAML_overall)
+```
+
+```{r}
+BeatAML_overall1 <- merge(BeatAML_overall,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+BeatAML_overall2 <- BeatAML_overall[!BeatAML_overall$Drugs %in% drug_anno$Name,]
+BeatAML_overall2$MOA <- "Unknown"
+
+BeatAML_overall <- rbind(BeatAML_overall1,
+                       BeatAML_overall2)
+```
+
+```{r}
+p <- ggplot(data = BeatAML_overall, 
+            aes(x = SD, 
+                y = Median,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("palettesForR::Web")) + theme(legend.position = "none")
+p_sd_BeatAML <- p
+p_sd_BeatAML
+```
+
+## FORALL
+```{r}
+FORALL_overall <- calSDandMedian(FORALL)
+FORALL_overall$Drugs <- rownames(FORALL_overall)
+FORALL_overall <- na.omit(FORALL_overall)
+```
+
+```{r}
+FORALL_overall <- merge(FORALL_overall,
+                       FORALL_druganno_leu[,c(1,4)], by.x = "Drugs",
+                       by.y = "Drug name")
+```
+
+```{r}
+p <- ggplot(data = FORALL_overall, 
+            aes(x = SD, 
+                y = Median,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=`Drug Class`)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv")) 
+p_sd_FORALL <- p
+p_sd_FORALL
+```
+
+# Overall pharmaceutics(TSNE)
+Select drugs with less than 20% missing data:
+```{r}
+ctrp1 <- ctrp1_drug_leu[,apply(ctrp1_drug_leu,2,function(x) sum(is.na(x))) < 0.2*nrow(ctrp1_drug_leu)]
+
+ctrp2 <- ctrp2_drug_leu[,apply(ctrp2_drug_leu,2,function(x) sum(is.na(x))) < 0.2*nrow(ctrp2_drug_leu)]
+# ctrp2 <- ctrp2_1[,apply(ctrp2_drug_leu2,2,function(x) sum(is.na(x))) < 0.2*nrow(ctrp2_drug_leu2)]
+
+gdsc1 <- gdsc1_drug_leu[,apply(gdsc1_drug_leu,2,function(x) sum(is.na(x))) < 0.2*nrow(gdsc1_drug_leu)]
+
+gdsc2 <- gdsc2_drug_leu[,apply(gdsc2_drug_leu,2,function(x) sum(is.na(x))) < 0.2*nrow(gdsc2_drug_leu)]
+
+filterDrugDf <- function(x){
+  x[,apply(x,2,function(x1) sum(is.na(x1))) < 0.2*nrow(x)]
+  return(x)
+}
+
+beatAML <- beatAML_drug_leu[,apply(beatAML_drug_leu,2,function(x) sum(is.na(x))) < 0.2*nrow(beatAML_drug_leu)]
+
+tavor <- tavor_drug_leu[,apply(tavor_drug_leu,2,function(x) sum(is.na(x))) < 0.2*nrow(tavor_drug_leu)]
+
+FORALL <- FORALL_drug_leu[,apply(FORALL_drug_leu,2,function(x) sum(is.na(x))) < 0.2*nrow(FORALL_drug_leu)]
+
+gCSI <- gCSI_drug_leu[,apply(gCSI_drug_leu,2,function(x) sum(is.na(x))) < 0.5*nrow(gCSI_drug_leu)]
+```
+
+## Preprocess(impute)
+sample in the col(drugs)
+
+```{r}
+gdsc1_1 <- gdsc1
+rownames(gdsc1_1) <- gdsc1$cell
+gdsc1_1$cell <- NULL
+gdsc1_1 <- as.data.frame(gdsc1_1)
+```
+
+impute missing data:
+```{r}
+gdsc1_1 <- impute.knn(as.matrix(gdsc1_1))$data
+```
+
+```{r}
+gdsc2_1 <- gdsc2
+rownames(gdsc2_1) <- gdsc2_1$cell
+gdsc2_1$cell <- NULL
+gdsc2_1 <- as.data.frame(gdsc2_1)
+```
+
+impute missing data:
+```{r}
+gdsc2_1 <- impute.knn(as.matrix(gdsc2_1))$data
+```
+
+```{r}
+ctrp1_1 <- ctrp1
+rownames(ctrp1_1) <- ctrp1_1$cell 
+ctrp1_1$cell <- NULL
+ctrp1_1 <- as.data.frame(ctrp1_1)
+
+ctrp1_1 <- impute.knn(as.matrix(ctrp1_1))$data
+```
+
+```{r}
+ctrp2_1 <- ctrp2
+rownames(ctrp2_1) <- ctrp2_1$cell 
+ctrp2_1$cell <- NULL
+ctrp2_1 <- as.data.frame(ctrp2_1)
+
+ctrp2_1 <- impute.knn(as.matrix(ctrp2_1))$data
+```
+
+```{r}
+gCSI_1 <- gCSI
+
+rownames(gCSI_1) <- gCSI_1$cells 
+gCSI_1$cells <- NULL
+gCSI_1 <- as.data.frame(gCSI_1)
+
+gCSI_1 <- impute.knn(as.matrix(gCSI_1))$data
+```
+
+```{r}
+FORALL_1 <- FORALL
+
+rownames(FORALL_1) <- FORALL_1$cells 
+FORALL_1$cells <- NULL
+FORALL_1 <- as.data.frame(FORALL_1)
+
+FORALL_1 <- impute.knn(as.matrix(FORALL_1))$data
+```
+
+```{r}
+beatAML_1 <- beatAML
+
+rownames(beatAML_1) <- beatAML_1$cells 
+beatAML_1$cells <- NULL
+beatAML_1 <- as.data.frame(beatAML_1)
+
+beatAML_1 <- impute.knn(as.matrix(beatAML_1))$data
+```
+
+```{r}
+tavor_1 <- tavor
+
+rownames(tavor_1) <- tavor_1$cell 
+tavor_1$cell <- NULL
+tavor_1 <- as.data.frame(tavor_1)
+
+tavor_1 <- impute.knn(as.matrix(tavor_1))$data
+```
+
+## gdsc1
+calculate:
+```{r}
+# # UMAP
+# gdsc_umap <- umap(gdsc1_1) 
+# # PCA
+# TSNE
+with_seed(123, gdsc_tsne <- Rtsne(t(gdsc1_1), dims = 2, 
+                                  pca = TRUE,theta = 0.0,max_iter = 5000,perplexity = 25))
+
+gdsc_tsne <- as.data.frame(gdsc_tsne$Y)
+colnames(gdsc_tsne) <- c("TSNE1", "TSNE2")
+rownames(gdsc_tsne) <- colnames(gdsc1_1)
+gdsc_tsne$Drugs <- rownames(gdsc_tsne)
+gdsc_tsne <- merge(gdsc_tsne,
+                      gdsc_drug_rename,
+                      by.x = "Drugs",
+                      by.y = "old")
+gdsc_tsne <- merge(gdsc_tsne,
+                      gdsc_drug_anno,
+                      by.x = "new",
+                      by.y = "DRUG_NAME2")
+tmp$dupli <- gdsc_tsne$new[duplicated(gdsc_tsne$new)]
+tmp$dupli
+```
+
+```{r}
+gdsc_tsne <- gdsc_tsne[-c(29,31),]
+gdsc_tsne[30,]$TARGET_PATHWAY <- "IGF1R/RTK signaling"
+```
+
+```{r}
+gdsc1_tsne <- gdsc_tsne
+```
+
+
+```{r}
+p <- ggplot(data = gdsc_tsne, 
+            aes(x = TSNE1, 
+                y = TSNE2,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=TARGET_PATHWAY)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv"))
+p
+```
+
+```{r}
+p_tsne_gdsc1 <- p
+```
+
+
+```{r}
+ggplotly(p_tsne_gdsc1)
+```
+
+
+```{r}
+tmp$for_label <- gdsc1_tsne[gdsc1_tsne$TARGET_PATHWAY %in% "Apoptosis regulation",]$Drugs
+for_label1 <- gdsc1_tsne[gdsc1_tsne$Drugs %in% tmp$for_label,]
+```
+
+
+```{r}
+p_gdsc1_tsne <- p +
+  geom_point(size = 4, shape = 1, data = for_label1) +
+  ggrepel::geom_label_repel(
+    aes(label = Drugs),
+    data = for_label1,
+    color="black",
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    nudge_y      = -0.2,
+   direction    = "y",
+   hjust        = 1,
+   segment.size = 0.1,
+   segment.linetype = 6,
+   segment.curvature = -0.1,
+   max.iter = 1000000,
+   max.time = 10,
+   nudge_x = for_label1[which(for_label1$TSNE1 < 0),]$TSNE1 + 1.5*min(for_label1$TSNE1),
+  )
+p_gdsc1_tsne
+```
+
+## gdsc2
+gdsc2
+calculate:
+```{r}
+# # UMAP
+# gdsc_umap <- umap(gdsc1_1) 
+# # PCA
+# gdsc_pca <- PCA(gdsc1_1) 
+# gdsc_pca <-  get_pca_ind(gdsc_pca)
+# gdsc_pca <- gdsc_pca$coord
+# gdsc_pca <- gdsc_pca[,c(1,2)]
+# TSNE
+with_seed(123, gdsc_tsne <- Rtsne(t(gdsc2_1), dims = 2, 
+                                  pca = TRUE,theta = 0.0,max_iter = 5000,perplexity = 25))
+
+gdsc_tsne <- as.data.frame(gdsc_tsne$Y)
+colnames(gdsc_tsne) <- c("TSNE1", "TSNE2")
+rownames(gdsc_tsne) <- colnames(gdsc2_1)
+gdsc_tsne$Drugs <- rownames(gdsc_tsne)
+gdsc_tsne <- merge(gdsc_tsne,
+                      gdsc_drug_rename,
+                      by.x = "Drugs",
+                      by.y = "old")
+gdsc_tsne <- merge(gdsc_tsne,
+                      gdsc_drug_anno,
+                      by.x = "new",
+                      by.y = "DRUG_NAME2")
+tmp$dupli <- gdsc_tsne$new[duplicated(gdsc_tsne$new)]
+tmp$dupli
+```
+
+```{r}
+gdsc_tsne <- gdsc_tsne[-c(15,20,31,45,51,86),]
+gdsc_tsne$TARGET_PATHWAY[gdsc_tsne$Drugs %in% c("DASATINIB",
+                                                      "GSK1904529A",
+                                                      "LAPATINIB",
+                                                      "SORAFENIB")] <- 
+  c("kinases & RTK signaling",
+    "IGF1R/RTK signaling",
+    "EGFR/RTK signaling",
+    "kinases & RTK signaling")
+
+gdsc2_tsne <- gdsc_tsne
+```
+
+```{r}
+p <- ggplot(data = gdsc2_tsne, 
+            aes(x = TSNE1, 
+                y = TSNE2,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=TARGET_PATHWAY)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv"))
+p
+```
+
+```{r}
+p_tsne_gdsc2 <- p
+```
+
+
+```{r}
+tmp$for_label_med <- gdsc2_overall[order(gdsc2_overall$Median),] %>% 
+  head(10) %>% select(Drugs) %>% unlist() 
+for_label2 <- gdsc_tsne[gdsc_tsne$Drugs %in% tmp$for_label_med,]
+```
+
+
+```{r}
+p_gdsc2_tsne <- p +
+  geom_point(size = 3, shape = 1, data = for_label2) +
+  ggrepel::geom_label_repel(
+    aes(label = Drugs),
+    data = for_label2,
+    color="black",
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    nudge_y      = -0.2,
+   direction    = "y",
+   hjust        = 1,
+   segment.size = 0.1,
+   segment.linetype = 6,
+   segment.curvature = -0.1,
+   max.iter = 1000000,
+   max.time = 10,
+   nudge_x = for_label[which(for_label$TSNE1 < 0),]$TSNE1 + 1.5*min(for_label$TSNE1),
+  )
+p_gdsc2_tsne
+```
+
+```{r}
+# ggsave(p_gdsc1_tsne, 
+#        filename = "Output/Steps/R03/p_gdsc1_tsne.png", device = "png", width = 10, height = 10, dpi = 300)
+# 
+# ggsave(p_gdsc2_tsne, 
+#        filename = "Output/Steps/R03/p_gdsc2_tsne.png", device = "png", width = 10, height = 10, dpi = 300)
+```
+
+## ctrp1
+```{r}
+with_seed(123, ctrp_tsne <- Rtsne(t(ctrp1_1), dims = 2, 
+                                  pca = TRUE,theta = 0.0,max_iter = 5000,perplexity = 25))
+
+ctrp_tsne <- as.data.frame(ctrp_tsne$Y)
+colnames(ctrp_tsne) <- c("TSNE1", "TSNE2")
+rownames(ctrp_tsne) <- colnames(ctrp1_1)
+ctrp_tsne$Drugs <- rownames(ctrp_tsne)
+```
+
+```{r}
+ctrp_tsne1 <- merge(ctrp_tsne,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+ctrp_tsne2 <- ctrp_tsne[!ctrp_tsne$Drugs %in% drug_anno$Name,]
+ctrp_tsne2$MOA <- "Unknown"
+
+ctrp_tsne <- rbind(ctrp_tsne1,
+                       ctrp_tsne2)
+ctrp1_tsne <- ctrp_tsne
+```
+
+```{r}
+p <- ggplot(data = ctrp1_tsne, 
+            aes(x = TSNE1, 
+                y = TSNE2,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("palettesForR::Web")) + theme(legend.position = "none")
+p
+```
+
+```{r}
+p_tsne_ctrp1 <- p
+```
+
+## ctrp2
+```{r}
+with_seed(123, ctrp_tsne <- Rtsne(t(ctrp2_1), dims = 2, 
+                                  pca = TRUE,theta = 0.0,max_iter = 5000,perplexity = 25))
+
+ctrp_tsne <- as.data.frame(ctrp_tsne$Y)
+colnames(ctrp_tsne) <- c("TSNE1", "TSNE2")
+rownames(ctrp_tsne) <- colnames(ctrp2_1)
+ctrp_tsne$Drugs <- rownames(ctrp_tsne)
+```
+
+```{r}
+ctrp_tsne1 <- merge(ctrp_tsne,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+ctrp_tsne2 <- ctrp_tsne[!ctrp_tsne$Drugs %in% drug_anno$Name,]
+ctrp_tsne2$MOA <- "Unknown"
+
+ctrp_tsne <- rbind(ctrp_tsne1,
+                       ctrp_tsne2)
+ctrp2_tsne <- ctrp_tsne
+```
+
+```{r}
+p <- ggplot(data = ctrp2_tsne, 
+            aes(x = TSNE1, 
+                y = TSNE2,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("palettesForR::Web")) + theme(legend.position = "none")
+p
+```
+
+```{r}
+p_tsne_ctrp2 <- p
+```
+
+## tavor
+```{r}
+with_seed(123, tavor_tsne <- Rtsne(t(tavor_1), dims = 2, 
+                                  pca = TRUE,theta = 0.0,max_iter = 5000,perplexity = 5))
+
+tavor_tsne <- as.data.frame(tavor_tsne$Y)
+colnames(tavor_tsne) <- c("TSNE1", "TSNE2")
+rownames(tavor_tsne) <- colnames(tavor_1)
+tavor_tsne$Drugs <- rownames(tavor_tsne)
+```
+
+```{r}
+tavor_tsne1 <- merge(tavor_tsne,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+tavor_tsne2 <- tavor_tsne[!tavor_tsne$Drugs %in% drug_anno$Name,]
+tavor_tsne2$MOA <- "Unknown"
+
+tavor_tsne <- rbind(tavor_tsne1,
+                       tavor_tsne2)
+```
+
+```{r}
+p <- ggplot(data = tavor_tsne, 
+            aes(x = TSNE1, 
+                y = TSNE2,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv")) + theme(legend.position = "none")
+p
+```
+
+```{r}
+p_tsne_tavor <- p
+```
+
+## gCSI
+```{r}
+with_seed(123, gCSI_tsne <- Rtsne(t(gCSI_1), dims = 2, 
+                                  pca = TRUE,theta = 0.0,max_iter = 5000,perplexity = 5))
+
+gCSI_tsne <- as.data.frame(gCSI_tsne$Y)
+colnames(gCSI_tsne) <- c("TSNE1", "TSNE2")
+rownames(gCSI_tsne) <- colnames(gCSI_1)
+gCSI_tsne$Drugs <- rownames(gCSI_tsne)
+```
+
+```{r}
+gCSI_tsne1 <- merge(gCSI_tsne,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+gCSI_tsne2 <- gCSI_tsne[!gCSI_tsne$Drugs %in% drug_anno$Name,]
+gCSI_tsne2$MOA <- "Unknown"
+
+gCSI_tsne <- rbind(gCSI_tsne1,
+                       gCSI_tsne2)
+```
+
+```{r}
+p <- ggplot(data = gCSI_tsne, 
+            aes(x = TSNE1, 
+                y = TSNE2,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv")) + theme(legend.position = "none")
+p
+```
+
+```{r}
+p_tsne_gCSI <- p
+```
+
+## BeatAML
+```{r}
+with_seed(123, BeatAML_tsne <- Rtsne(t(beatAML_1), dims = 2, 
+                                  pca = TRUE,theta = 0.0,max_iter = 5000,perplexity = 25))
+
+BeatAML_tsne <- as.data.frame(BeatAML_tsne$Y)
+colnames(BeatAML_tsne) <- c("TSNE1", "TSNE2")
+rownames(BeatAML_tsne) <- colnames(beatAML_1)
+BeatAML_tsne$Drugs <- rownames(BeatAML_tsne)
+```
+
+```{r}
+BeatAML_tsne1 <- merge(BeatAML_tsne,
+                       drug_anno[,1:2], by.x = "Drugs",
+                       by.y = "Name")
+BeatAML_tsne2 <- BeatAML_tsne[!BeatAML_tsne$Drugs %in% drug_anno$Name,]
+BeatAML_tsne2$MOA <- "Unknown"
+
+BeatAML_tsne <- rbind(BeatAML_tsne1,
+                       BeatAML_tsne2)
+```
+
+```{r}
+p <- ggplot(data = BeatAML_tsne, 
+            aes(x = TSNE1, 
+                y = TSNE2,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=MOA)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv")) + theme(legend.position = "none")
+p
+```
+
+```{r}
+p_tsne_beatAML <- p
+```
+
+## FORALL
+```{r}
+with_seed(123, forall_tsne <- Rtsne(t(FORALL_1), dims = 2, 
+                                  pca = TRUE,theta = 0.0,max_iter = 5000,perplexity = 25, check_duplicates = FALSE))
+
+forall_tsne <- as.data.frame(forall_tsne$Y)
+colnames(forall_tsne) <- c("TSNE1", "TSNE2")
+rownames(forall_tsne) <- colnames(FORALL_1)
+forall_tsne$Drugs <- rownames(forall_tsne)
+```
+
+```{r}
+forall_tsne <- merge(forall_tsne,
+                       FORALL_druganno_leu[,c(1,4)], by.x = "Drugs",
+                       by.y = "Drug name")
+```
+
+```{r}
+p <- ggplot(data = forall_tsne, 
+            aes(x = TSNE1, 
+                y = TSNE2,
+                label = Drugs)) +
+  geom_point(alpha=0.4, size=3.5, 
+             aes(color=`Drug Class`)) + theme_bw() + 
+  scale_color_manual(values = paletteer::paletteer_d("ggsci::default_igv")) 
+p
+```
+
+```{r}
+p_tsne_forall <- p
+```
+
+# Compare Drugs
+## Preprocess
+```{r}
+load(file = "Output/Steps/R01/gdsc_leu_v2.Rda")
+```
+
+```{r}
+head(gdsc_anno_leu)
+```
+
+```{r}
+gdsc_anno_leu$Name2 <- gsub("-", "", gdsc_anno_leu$Name)
+
+# gdsc1_1 <- as.data.frame(t(gdsc1_1))
+# gdsc1_1$COSMIC_ID <- rownames(gdsc1_1)
+gdsc1_check_drugs <- merge(gdsc1_drug_leu2,
+                           gdsc_anno_leu[,c(1,3,5)],
+                           by.x = "COSMIC_ID",
+                           by.y = "Name2")
+```
+
+## Similar results but diff targets
+THZ-2-102-1: CDK7
+YM-155: BIRC5
+
+THZ1+ >> BIRC5-
+https://pubmed.ncbi.nlm.nih.gov/30145799/
+
+The boxplot distribution of these two drugs.
+
+```{r}
+gdsc1_check_drugs2 <- gdsc1_check_drugs[,c(
+  "Barcode", "Source2", "COSMIC_ID", "YM-155", "THZ-2-102-1"
+)]
+# colnames(gdsc1_check_drugs2)[4] <- "DrugAUC1"
+# colnames(gdsc1_check_drugs2)[5] <- "DrugAUC2"
+# gdsc1_check_drugs2 <- na.omit(gdsc1_check_drugs2)
+
+gdsc1_check_drugs2 <- na.omit(gdsc1_check_drugs2)
+
+tmp$levels <- gdsc1_check_drugs2[order(gdsc1_check_drugs2$`YM-155`),]$Barcode %>% 
+  unique()
+
+gdsc1_check_drugs_tmp <- gather(data = gdsc1_check_drugs2[,c(3:5)],
+       key = DrugName,
+       value = DrugAUC,
+       - COSMIC_ID)
+
+gdsc1_check_drugs2 <- merge(
+  gdsc1_check_drugs2[,-c(4:5)],
+  gdsc1_check_drugs_tmp, by = "COSMIC_ID"
+)
+
+gdsc1_check_drugs2$Barcode <- factor(gdsc1_check_drugs2$Barcode,
+                                       levels = tmp$levels)
+```
+
+```{r}
+ggbarplot(data = gdsc1_check_drugs2, 
+          x = "Barcode",
+          y = "DrugAUC", fill = "DrugName", position = position_dodge()) + theme(
+            axis.text.x = element_text(angle = 90)
+          )
+```
+
+
+## Similar targets but diff effects
+mTOR: 
+torin2: MTOR, ATM, ATR, DNAPK
+TEMSIROLIMUS: MTOR
+
+## low median and low sd drugs
+Mean these drugs are stable.
+torin2 in gdsc1 for example.
+
+ym-155 for both gdsc1 and gdsc2.
+
+```{r}
+gdsc1_check_drugs2 <- gdsc1_check_drugs[,c(
+  "Barcode", "YM-155", "Source2", "COSMIC_ID"
+)]
+colnames(gdsc1_check_drugs2)[2] <- "DrugAUC"
+gdsc1_check_drugs2 <- na.omit(gdsc1_check_drugs2)
+
+gdsc1_check_drugs2 <- gdsc1_check_drugs2[order(gdsc1_check_drugs2$DrugAUC),]
+gdsc1_check_drugs2$Barcode <- factor(gdsc1_check_drugs2$Barcode,
+                                     levels = unique(gdsc1_check_drugs2$Barcode))
+```
+
+
+```{r}
+ggbarplot(data = gdsc1_check_drugs2, 
+          x = "Barcode",
+          y = "DrugAUC", fill = "Source2") + theme(
+            axis.text.x = element_text(angle = 90)
+          )
+```
+
+
+# Intersection && Correspondence
+```{r}
+gdsc_overlap <- intersect(gdsc1_overall$Drugs, gdsc2_overall$Drugs)
+gdsc_overlap
+```
+
+```{r}
+for_label1[for_label1$Drugs %in% gdsc_overlap,]
+```
+
+
+# Save
+
+## Raw
+```{r}
+ctrp1 <- ctrp1_drug_leu2
+rownames(ctrp1) <- ctrp1$DepMap_ID; ctrp1$DepMap_ID <- NULL
+
+ctrp2 <- ctrp2_drug_leu2
+rownames(ctrp2) <- ctrp2$DepMap_ID; ctrp2$DepMap_ID <- NULL
+
+gdsc1 <- gdsc1_drug_leu2
+rownames(gdsc1) <- gdsc1$COSMIC_ID; gdsc1$COSMIC_ID <- NULL
+
+gdsc2 <- gdsc2_drug_leu2
+rownames(gdsc2) <- gdsc2$COSMIC_ID; gdsc2$COSMIC_ID <- NULL
+
+```
+
+```{r}
+save(ctrp1,
+     ctrp2,
+     gdsc1,
+     gdsc2,
+     file = "Output/Steps/R03/shiny/leu_drugs_shiny.Rda")
+```
+
+## SD
+```{r}
+gdsc1_sd_df <- gdsc1_overall
+gdsc1_sd_df$new <- NULL
+gdsc2_sd_df <- gdsc2_overall
+gdsc2_sd_df$new <- NULL
+ctrp1_sd_df <- ctrp1_overall
+ctrp2_sd_df <- ctrp2_overall
+```
+
+```{r}
+save(gdsc1_sd_df,
+     gdsc2_sd_df,
+     ctrp1_sd_df,
+     ctrp2_sd_df,
+     file = "Output/Steps/R03/shiny/leu_drugs_sd.Rda")
+```
+
+plot:
+```{r}
+save(p_sd_gdsc1,
+     p_sd_gdsc2,
+     p_sd_ctrp1,
+     p_sd_ctrp2,
+     p_sd_gCSI,
+     p_sd_tavor,
+     p_sd_BeatAML,
+     p_sd_FORALL,
+     file = "Output/Steps/R03/shiny/leu_drugs_sd_plot.Rda")
+```
+
+## tsne
+```{r}
+gdsc1_tsne$new <- NULL
+gdsc2_tsne$new <- NULL
+```
+
+```{r}
+save(gdsc1_tsne,
+     gdsc2_tsne,
+     ctrp1_tsne,
+     ctrp2_tsne,
+     BeatAML_tsne,
+     tavor_tsne,
+     forall_tsne,
+     gCSI_tsne,
+     file = "Output/Steps/R03/shiny/leu_drugs_tsne.Rda")
+```
+
+```{r}
+save(
+  p_tsne_ctrp1,
+  p_tsne_ctrp2,
+  p_tsne_gdsc1,
+  p_tsne_gdsc2,
+  p_tsne_beatAML,
+  p_tsne_gCSI,
+  p_tsne_forall,
+  p_tsne_tavor,
+  file = "Output/Steps/R03/shiny/leu_drugs_tsne_plot.Rda"
+)
+```
+
+
+
+

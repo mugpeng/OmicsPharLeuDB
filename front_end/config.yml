@@ -1,0 +1,9 @@
+default:
+  test_mode: F
+
+production:
+  test_mode: F
+  
+test:
+  test_mode: T
+

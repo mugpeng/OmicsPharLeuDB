@@ -1,0 +1,167 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table",
+                 "ggpubr", "patchwork",
+                 "snowfall")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+# load data
+```{r}
+load(file = "Output/Steps/R01/ccle_cnv_leu_v1.Rda")
+load(file = "Output/Steps/R01/ccle_drug_leu_v1.Rda")
+load(file = "Output/Steps/R01/gdsc_cnv_leu_v1.Rda")
+load(file = "Output/Steps/R01/gdsc_drug_leu_v1.Rda")
+colnames(gdsc_cnv_leu) <- gsub("-", "", colnames(gdsc_cnv_leu))
+```
+
+```{r}
+source("Function.R")
+```
+
+# CNV and types
+## GDSC
+```{r}
+table(gdsc_anno_leu2$lineage_subtype)
+```
+
+```{r}
+colnames(gdsc_cnv_leu) <- gsub("-", "", colnames(gdsc_cnv_leu))
+gdsc_anno <- gdsc_anno_leu2[match(colnames(gdsc_cnv_leu), gdsc_anno_leu2$Name2),]
+```
+
+```{r, warning = F}
+gdsc_cnv_df <- wilcoxOmicsTest(gdsc_cnv_leu, gdsc_anno)
+```
+
+
+# GDSC1
+```{r}
+gdsc1_cnv <- preContinuous(gdsc_cnv_leu, gdsc1_drug_leu)[[1]]
+gdsc1_drug <- preContinuous(gdsc_cnv_leu, gdsc1_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+gdsc1_cnv_re_df <- calSigpairs(gdsc1_cnv, gdsc1_drug)
+gdsc1_cnv_re_df_sig <- gdsc1_cnv_re_df[gdsc1_cnv_re_df$p < .001,]
+rownames(gdsc1_exp_re_df_sig) <- NULL
+# sfStop()
+```
+
+# GDSC2
+```{r}
+gdsc2_cnv <- preContinuous(gdsc_cnv_leu, gdsc2_drug_leu)[[1]]
+gdsc2_drug <- preContinuous(gdsc_cnv_leu, gdsc2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+gdsc2_exp_re_df <- calSigpairs(ctrp1_exp, ctrp1_drug)
+gdsc2_exp_re_df_sig <- gdsc2_exp_re_df[gdsc2_exp_re_df$p < .001,]
+```
+
+# CTRP1
+```{r}
+ctrp1_cnv <- preContinuous(ccle_cnv_leu, ctrp1_drug_leu)[[1]]
+ctrp1_drug <- preContinuous(ccle_cnv_leu, ctrp1_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp1_cnv_re_df <- calSigpairs(ctrp1_cnv, ctrp1_drug)
+ctrp1_cnv_re_df_sig <- ctrp1_cnv_re_df[ctrp1_cnv_re_df$p < .001,]
+```
+
+# CTRP2
+```{r}
+ctrp2_cnv <- preContinuous(ccle_cnv_leu, ctrp2_drug_leu)[[1]]
+ctrp2_drug <- preContinuous(ccle_cnv_leu, ctrp2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp2_cnv_re_df <- calSigpairs(ctrp2_cnv, ctrp2_drug)
+ctrp2_cnv_re_df_sig <- ctrp2_cnv_re_df[ctrp2_cnv_re_df$p < .001,]
+```
+
+# gCSI
+```{r}
+load(file = "Output/Steps/R01/gCSI_cnv_leu_v1.Rda")
+load(file = "Output/Steps/R01/gCSI_drug_leu_v1.Rda")
+```
+
+```{r}
+# gCSI_cnv_leu <- as.data.frame(t(gCSI_cnv_leu))
+```
+
+```{r}
+gCSI_cnv <- preContinuous(as.data.frame(gCSI_cnv_leu), as.data.frame(gCSI_drug_leu))[[1]]
+gCSI_cnvdrugs <- preContinuous(as.data.frame(gCSI_cnv_leu), as.data.frame(gCSI_drug_leu))[[2]]
+```
+
+
+# Save
+Each:
+```{r}
+saveRDS(gdsc1_cnv_re_df,
+     file = "Output/Steps/R09/gdsc1_cnv_re_df.Rds")
+
+saveRDS(gdsc2_cnv_re_df,
+     file = "Output/Steps/R09/gdsc2_cnv_re_df.Rds")
+
+saveRDS(ctrp1_cnv_re_df,
+     file = "Output/Steps/R09/ctrp1_cnv_re_df.Rds")
+
+saveRDS(ctrp2_cnv_re_df,
+     file = "Output/Steps/R09/ctrp2_cnv_re_df.Rds")
+```
+
+Sig:
+```{r}
+save(
+    gdsc1_cnv_re_df_sig,
+    gdsc2_cnv_re_df_sig,
+    ctrp1_cnv_re_df_sig,
+    ctrp2_cnv_re_df_sig,
+    file = "Output/Steps/R09/shiny/cnv_sig_all_df.Rda"
+)
+```
+
+shiny plot:
+```{r}
+gdsc2_cnvdrugs <- gdsc2_drug
+save(gdsc2_cnv,
+     gdsc2_cnvdrugs, file = "Output/Steps/R09/shiny/gdsc2_cnv_df.Rda")
+
+gdsc1_cnvdrugs <- gdsc1_drug
+save(gdsc1_cnv,
+     gdsc1_cnvdrugs, file = "Output/Steps/R09/shiny/gdsc1_cnv_df.Rda")
+
+ctrp2_cnvdrugs <- ctrp2_drug
+save(ctrp2_cnv,
+     ctrp2_cnvdrugs, file = "Output/Steps/R09/shiny/ctrp2_cnv_df.Rda")
+
+ctrp1_cnvdrugs <- ctrp1_drug
+save(ctrp1_cnv,
+     ctrp1_cnvdrugs, file = "Output/Steps/R09/shiny/ctrp1_cnv_df.Rda")
+
+save(gCSI_cnv,
+     gCSI_cnvdrugs, file = "Output/Steps/R09/shiny/gCSI_cnv_df.Rda")
+```
+
+```{r}
+save(gdsc2_cnv,
+     gdsc2_cnvdrugs,
+     gdsc1_cnv,
+     gdsc1_cnvdrugs,
+     ctrp2_cnv,
+     ctrp2_cnvdrugs,
+     ctrp1_cnv,
+     ctrp1_cnvdrugs,
+     gCSI_cnv,
+     gCSI_cnvdrugs, file = "Output/Steps/R09/shiny/merged/merged_cnv_df.Rda"
+)
+```
+

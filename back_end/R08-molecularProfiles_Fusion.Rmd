@@ -1,0 +1,154 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table",
+                 "ggpubr", "patchwork",
+                 "maftools",
+                 "snowfall")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+# load data
+```{r}
+load(file = "Output/Steps/R01/ccle_fusion_leu_v1.Rda")
+load(file = "Output/Steps/R01/ccle_drug_leu_v1.Rda")
+# gdsc_fusion_leu$cells <- gsub("-", "", gdsc_fusion_leu$cells)
+```
+
+```{r}
+source("Function.R")
+```
+
+```{r}
+ccle_fusion_leu$DepMap_ID <- NULL
+colnames(ccle_fusion_leu) <- c("fusion", "cells")
+
+ccle_fusion_leu <- as.data.frame(ccle_fusion_leu)
+```
+
+```{r}
+ccle_fusion_leu$fusion <- gsub("--", "_", ccle_fusion_leu$fusion) 
+```
+
+
+# Fusion and types
+## ccle
+```{r}
+# ccle_fusion <- merge(ccle_fusion_leu[,1:2],
+#                      ccle_anno_leu,
+#                      by = "DepMap_ID")
+
+ccle_fusion <- ccle_fusion_leu[,1:2]
+```
+
+```{r}
+# ccle_fusion_df <- fisherOmicsTest(ccle_fusion, "FusionName")
+# ccle_fusion_df <- do.call(rbind, ccle_fusion_df)
+```
+
+```{r}
+ccle_fusion_sig_df <- ccle_fusion_df[ccle_fusion_df$fisher_Pvalue < .05,]
+```
+
+# CTRP1
+```{r}
+ctrp1_fusion <- preDiscrete(ccle_fusion_leu, ctrp1_drug_leu)[[1]]
+ctrp1_drug <- preDiscrete(ccle_fusion_leu, ctrp1_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp1_fusion_re_df <- wilcoxOmicsDrugsTest(ctrp1_drug, ctrp1_fusion, "fusion")
+ctrp1_fusion_re_df_sig <- ctrp1_fusion_re_df[ctrp1_fusion_re_df$p < .05,]
+```
+
+# CTRP2
+```{r}
+ctrp2_fusion <- preDiscrete(ccle_fusion_leu, ctrp2_drug_leu)[[1]]
+ctrp2_drug <- preDiscrete(ccle_fusion_leu, ctrp2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp2_fusion_re_df <- wilcoxOmicsDrugsTest(ctrp2_drug, ctrp2_fusion, "fusion")
+ctrp2_fusion_re_df_sig <- ctrp2_fusion_re_df[ctrp2_fusion_re_df$p < .01,]
+```
+
+# FORALL
+```{r}
+load(file = "Output/Steps/R01/FORALL_fusion_leu_v1.Rda")
+load(file = "Output/Steps/R01/FORALL_drug_leu_v1.Rda")
+```
+
+```{r}
+FORALL_fusion_leu <- as.data.frame(t(FORALL_fusion_leu))
+colnames(FORALL_fusion_leu) <- FORALL_fusion_leu[1,]
+FORALL_fusion_leu <- FORALL_fusion_leu[-1,]
+FORALL_fusion <- as.data.frame(apply(FORALL_fusion_leu, 2, function(x){
+    ifelse(x %in% "0", "no", "yes")
+}))
+rownames(FORALL_fusion) <- rownames(FORALL_fusion_leu)
+FORALL_fusion$cells <- rownames(FORALL_fusion)
+
+FORALL_fusion <- gather(data = FORALL_fusion,
+                     key = fusion,
+                     value = event,
+                     - cells)
+FORALL_fusion <- FORALL_fusion[FORALL_fusion$event %in% "yes",]
+```
+
+```{r}
+FORALL_fusion <- unique(FORALL_fusion[,c(2,1)])
+FORALL_fusion$fusion <- gsub(":", "_", FORALL_fusion$fusion)
+```
+
+```{r}
+FORALL_fusion <- preDiscrete(FORALL_fusion, FORALL_drug_leu)[[1]]
+FORALL_fusiondrugs <- preDiscrete(FORALL_fusion, FORALL_drug_leu)[[2]]
+```
+
+# Save
+Each:
+```{r}
+saveRDS(ctrp1_fusion_re_df,
+     file = "Output/Steps/R08/ctrp1_fusion_re_df.Rds")
+
+saveRDS(ctrp2_fusion_re_df,
+     file = "Output/Steps/R08/ctrp2_fusion_re_df.Rds")
+```
+
+Sig:
+```{r}
+save(
+    ctrp1_fusion_re_df_sig,
+    ctrp2_fusion_re_df_sig,
+    file = "Output/Steps/R08/shiny/fusion_sig_all_df.Rda"
+)
+```
+
+shiny plot:
+```{r}
+ctrp2_fusiondrugs <- ctrp2_drug
+save(ctrp2_fusion,
+     ctrp2_fusiondrugs, file = "Output/Steps/R08/shiny/ctrp2_fusion_df.Rda")
+
+ctrp1_fusiondrugs <- ctrp1_drug
+save(ctrp1_fusion,
+     ctrp1_fusiondrugs, file = "Output/Steps/R08/shiny/ctrp1_fusion_df.Rda")
+
+save(FORALL_fusion,
+     FORALL_fusiondrugs,
+     file = "Output/Steps/R08/shiny/FORALL_fusion_df.Rda")
+```
+
+```{r}
+save(ctrp2_fusion,
+     ctrp2_fusiondrugs,
+     ctrp1_fusion,
+     ctrp1_fusiondrugs,
+     FORALL_fusion,
+     FORALL_fusiondrugs,
+     file = "Output/Steps/R08/shiny/merged/merged_fusion_df.Rda"
+)
+```
+

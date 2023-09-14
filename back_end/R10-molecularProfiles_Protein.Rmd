@@ -1,0 +1,107 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table",
+                 "ggpubr", "patchwork",
+                 "snowfall")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+# load data
+```{r}
+load(file = "Output/Steps/R01/ccle_protein_leu_v1.Rda")
+load(file = "Output/Steps/R01/ccle_drug_leu_v1.Rda")
+```
+
+```{r}
+source("Function.R")
+```
+
+# protein and types
+# CTRP1
+```{r}
+ctrp1_protein <- preContinuous(ccle_protein_leu, ctrp1_drug_leu)[[1]]
+ctrp1_drug <- preContinuous(ccle_protein_leu, ctrp1_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp1_protein_re_df <- calSigpairs(ctrp1_protein, ctrp1_drug)
+ctrp1_protein_re_df_sig <- ctrp1_protein_re_df[ctrp1_protein_re_df$p < .05,]
+```
+
+# CTRP2
+```{r}
+ctrp2_protein <- preContinuous(ccle_protein_leu, ctrp2_drug_leu)[[1]]
+ctrp2_drug <- preContinuous(ccle_protein_leu, ctrp2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp2_protein_re_df <- calSigpairs(ctrp2_protein, ctrp2_drug)
+ctrp2_protein_re_df_sig <- ctrp2_protein_re_df[ctrp2_protein_re_df$p < .05,]
+```
+
+# FORALL
+```{r}
+load(file = "Output/Steps/R01/FORALL_protein_leu_v1.Rda")
+load(file = "Output/Steps/R01/FORALL_drug_leu_v1.Rda")
+```
+
+```{r, warning=F}
+FORALL_protein_leu <- as.data.frame(FORALL_protein_leu)
+tmp$names <- colnames(FORALL_protein_leu)
+tmp$rownames <- rownames(FORALL_protein_leu)
+FORALL_protein_leu <- as.data.frame(apply(FORALL_protein_leu, 2, as.numeric))
+colnames(FORALL_protein_leu) <- tmp$names
+rownames(FORALL_protein_leu) <- tmp$rownames
+```
+
+```{r}
+FORALL_protein <- preContinuous(FORALL_protein_leu, FORALL_drug_leu)[[1]]
+FORALL_proteindrugs <- preContinuous(FORALL_protein_leu, FORALL_drug_leu)[[2]]
+```
+
+
+# Save
+Each:
+```{r}
+saveRDS(ctrp1_protein_re_df,
+     file = "Output/Steps/R10/ctrp1_protein_re_df.Rds")
+
+saveRDS(ctrp2_protein_re_df,
+     file = "Output/Steps/R10/ctrp2_protein_re_df.Rds")
+```
+
+Sig:
+```{r}
+save(
+    ctrp1_protein_re_df_sig,
+    ctrp2_protein_re_df_sig,
+    file = "Output/Steps/R10/shiny/protein_sig_all_df.Rda"
+)
+```
+
+shiny plot:
+```{r}
+ctrp2_proteindrugs <- ctrp2_drug
+save(ctrp2_protein,
+     ctrp2_proteindrugs, file = "Output/Steps/R10/shiny/ctrp2_protein_df.Rda")
+
+ctrp1_proteindrugs <- ctrp1_drug
+save(ctrp1_protein,
+     ctrp1_proteindrugs, file = "Output/Steps/R10/shiny/ctrp1_protein_df.Rda")
+
+save(FORALL_protein,
+     FORALL_proteindrugs, file = "Output/Steps/R10/shiny/FORALL_protein_df.Rda")
+```
+
+```{r}
+save(ctrp2_protein,
+     ctrp2_proteindrugs,
+     ctrp1_protein,
+     ctrp1_proteindrugs,
+     FORALL_protein,
+     FORALL_proteindrugs,
+     file = "Output/Steps/R10/shiny/merged/merged_protein_df.Rda")
+```

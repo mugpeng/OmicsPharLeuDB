@@ -1,0 +1,355 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table",
+                 "ggpubr", "patchwork",
+                 "maftools",
+                 "snowfall")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+# load data
+```{r}
+load(file = "Output/Steps/R01/ccle_mut_leu_v1.Rda")
+load(file = "Output/Steps/R01/ccle_drug_leu_v1.Rda")
+load(file = "Output/Steps/R01/gdsc_mut_leu_v1.Rda")
+load(file = "Output/Steps/R01/gdsc_drug_leu_v1.Rda")
+gdsc_mut_leu$cells <- gsub("-", "", gdsc_mut_leu$cells)
+```
+
+```{r}
+source("Function.R")
+```
+
+# Preprocess
+## GDSC
+```{r}
+gdsc_mut_leu$genes_muts <- paste(gdsc_mut_leu$genes, gdsc_mut_leu$mutation,
+                                 sep = "_")
+```
+
+```{r}
+gdsc_mut_leu <- gdsc_mut_leu[!gdsc_mut_leu$mutation %in% "p.?",]
+```
+
+## ccle
+```{r}
+# ccle_mut_leu <- merge(ccle_mut_leu,
+#                       ccle_anno_leu[,c(1,2,6,7)],
+#                       by = "DepMap_ID")
+ccle_mut_leu2 <- ccle_mut_leu
+ccle_mut_leu2 <- ccle_mut_leu2[,c(16, 1, 4, 5,6,10,11,19,9,8)]
+colnames(ccle_mut_leu2) <- c(
+  "Tumor_Sample_Barcode", "Hugo_Symbol",
+  "Chromosome", "Start_Position", "End_Position",
+  "Reference_Allele", "Tumor_Seq_Allele2",
+  "Amino_Acid_Change",
+  "Variant_Type",
+  "Variant_Classification"
+)
+ccle_anno_leu2 <- ccle_anno_leu
+ccle_anno_leu2$Tumor_Sample_Barcode <- ccle_anno_leu2$DepMap_ID
+# ccle_anno_leu2 <- ccle_anno_leu2[ccle_anno_leu2$DepMap_ID %in% ccle_mut_leu2$Tumor_Sample_Barcode,]
+ccle.maf <- read.maf(maf = ccle_mut_leu2, clinicalData = ccle_anno_leu2)
+```
+
+```{r}
+plotmafSummary(maf = ccle.maf, rmOutlier = TRUE, addStat = 'median', dashboard = TRUE, titvRaw = FALSE)
+```
+
+```{r}
+oncoplot(maf = ccle.maf, top = 10, clinicalFeatures = 'lineage_subtype')
+```
+
+### Mut and types
+```{r}
+table(ccle_mut_leu2$Variant_Classification)
+```
+
+
+```{r}
+ccle_mut <- unique(ccle_mut_leu[!ccle_mut_leu$Variant_Classification %in% "Silent", c(1,16)])
+
+# test1 <- merge(ccle_mut[ccle_mut$Hugo_Symbol %in% "TTN",],
+#                   ccle_anno_leu[,c(1,2,6,7)], by = "DepMap_ID", all.y = T)
+# test1[,"TTN"] <- ifelse(is.na(test1$Hugo_Symbol), "no", "yes")
+# 
+# fisher.test(matrix(c(83, 54, 38, 13), nrow = 2))
+
+```
+
+```{r}
+ccle_mut_list <- lapply(unique(ccle_mut$Hugo_Symbol), function(genes){
+  # genes = "CDK11A"
+  tab1 <- merge(ccle_mut[ccle_mut$Hugo_Symbol %in% genes,],
+                  ccle_anno_leu[,c(1,2,6,7)], by = "DepMap_ID", all.y = T)
+  tab1 <- as.data.frame(tab1)
+  tab1[,genes] <- ifelse(is.na(tab1$Hugo_Symbol), "no", "yes")
+  all_tab1 <- table(tab1[,genes])
+  re <- lapply(c("ALL", "AML", "CML"), function(types){
+    # types = "ALL"
+    tab2 <- tab1[tab1$lineage_subtype %in% types,]
+    all_tab2 <- table(tab2[,genes])
+    if(length(all_tab2) >= 2){
+      test_re <- fisher.test(matrix(c(all_tab1["yes"], all_tab1["no"], all_tab2["yes"], all_tab2["no"]), nrow = 2))
+      prop <- c(all_tab1["yes"]/nrow(tab1), all_tab2["yes"]/nrow(tab2))
+      re <- c(round(as.numeric(prop), 3), test_re$p.value, types)
+    } else{
+      if(is.na(all_tab2["yes"])) {prop <- c(all_tab1["yes"]/nrow(tab1), 0)}
+      else{prop <- c(all_tab1["yes"]/nrow(tab1), 1)}
+      re <- c(round(as.numeric(prop), 3), 1, types)
+    }
+  })
+  re <- do.call(rbind, re)
+  re <- as.data.frame(re)
+  colnames(re) <- c("All_prop", "subtype_prop", "fisher_Pvalue", "types")
+  sapply(1:3, function(x){
+    re[,x] <<- as.numeric(re[,x])
+  })
+  re$genes <- genes
+  return(re)
+})
+```
+
+```{r}
+# ccle_mut_list2 <- ccle_mut_list
+# ccle_mut_list2 <- lapply(1:16368, function(x){
+#   ccle <- ccle_mut_list2[[x]]
+#   ccle$genes <- names(ccle_mut_list2)[x]
+#   return(ccle)
+# })
+ccle_mut_df <- do.call(rbind, ccle_mut_list)
+```
+
+```{r}
+ccle_mut_sig_df <- ccle_mut_df[ccle_mut_df$fisher_Pvalue < .05,]
+```
+
+### Input for drugs analysis
+```{r}
+ccle_mut_leu3 <- unique(ccle_mut_leu2[!ccle_mut_leu2$Variant_Classification %in% "Silent", c(2,1,8)])
+
+ccle_mut_leu3 <- merge(ccle_mut_leu3,
+                   ccle_anno_leu[,c(1,2)],
+                   by.x = "Tumor_Sample_Barcode",
+                   by.y = "DepMap_ID")
+ccle_mut_leu3 <- ccle_mut_leu3[,c(2,4,3)]
+ccle_mut_leu3$genes_muts <- paste(ccle_mut_leu3$Hugo_Symbol, ccle_mut_leu3$Amino_Acid_Change,
+                                 sep = "_")
+colnames(ccle_mut_leu3)[1:3] <- colnames(gdsc_mut_leu)[1:3]
+```
+
+```{r}
+ccle_mut_leu3 <- ccle_mut_leu3[!ccle_mut_leu3$mutation %in% "",]
+ccle_mut_leu3 <- as.data.frame(ccle_mut_leu3)
+```
+
+
+# GDSC1
+## analysis
+```{r}
+gdsc1_mut <- preDiscrete(gdsc_mut_leu, gdsc1_drug_leu)[[1]]
+gdsc1_drug <- preDiscrete(gdsc_mut_leu, gdsc1_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+gdsc1_mut_re_df <- wilcoxOmicsDrugsTest(gdsc1_drug, gdsc1_mut, "genes")
+gdsc1_mut_re_df_sig <- gdsc1_mut_re_df[gdsc1_mut_re_df$p < .01,]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+gdsc1_mutgenes_re_df <- wilcoxOmicsDrugsTest(gdsc1_drug, gdsc1_mut, "genes_muts")
+gdsc1_mutgenes_re_df_sig <- gdsc1_mutgenes_re_df[gdsc1_mutgenes_re_df$p < .01,]
+```
+## plot
+```{r}
+plotMutsDrugs(drugs_df = gdsc1_drug, omics_df = gdsc1_mut, drug_names = "CGP-60474", omics_names = "KMT2D",
+              mutgenes_mode = F)
+```
+
+
+# GDSC2
+```{r}
+gdsc2_mut <- preDiscrete(gdsc_mut_leu, gdsc2_drug_leu)[[1]]
+gdsc2_drug <- preDiscrete(gdsc_mut_leu, gdsc2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+gdsc2_mut_re_df <- wilcoxOmicsDrugsTest(gdsc2_drug, gdsc2_mut, "genes")
+gdsc2_mut_re_df_sig <- gdsc2_mut_re_df[gdsc2_mut_re_df$p < .01,]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+gdsc2_mutgenes_re_df <- wilcoxOmicsDrugsTest(gdsc2_drug, gdsc2_mut, "genes_muts")
+gdsc2_mutgenes_re_df_sig <- gdsc2_mutgenes_re_df[gdsc2_mutgenes_re_df$p < .01,]
+```
+
+# CTRP1
+```{r}
+ctrp1_mut <- preDiscrete(ccle_mut_leu3, ctrp1_drug_leu)[[1]]
+ctrp1_drug <- preDiscrete(ccle_mut_leu3, ctrp1_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp1_mut_re_df <- wilcoxOmicsDrugsTest(ctrp1_drug, ctrp1_mut, "genes")
+ctrp1_mut_re_df_sig <- ctrp1_mut_re_df[ctrp1_mut_re_df$p < .05,]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp1_mutgenes_re_df <- wilcoxOmicsDrugsTest(ctrp1_drug, ctrp1_mut, "genes_muts")
+ctrp1_mutgenes_re_df_sig <- ctrp1_mutgenes_re_df[ctrp1_mutgenes_re_df$p < .1,]
+```
+
+# CTRP2
+```{r}
+ctrp2_mut <- preDiscrete(ccle_mut_leu3, ctrp2_drug_leu)[[1]]
+ctrp2_drug <- preDiscrete(ccle_mut_leu3, ctrp2_drug_leu)[[2]]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp2_mut_re_df <- wilcoxOmicsDrugsTest(ctrp2_drug, ctrp2_mut, "genes")
+ctrp2_mut_re_df_sig <- ctrp2_mut_re_df[ctrp2_mut_re_df$p < .01,]
+```
+
+```{r}
+sfInit(parallel = TRUE, cpus = 6)
+ctrp2_mutgenes_re_df <- wilcoxOmicsDrugsTest(ctrp2_drug, ctrp2_mut, "genes_muts")
+ctrp2_mutgenes_re_df_sig <- ctrp2_mutgenes_re_df[ctrp2_mutgenes_re_df$p < .01,]
+```
+
+# BeatAML
+```{r}
+load(file = "Output/Steps/R01/beatAML_mut_leu_v1.Rda")
+load(file = "Output/Steps/R01/beatAML_drug_leu_v1.Rda")
+```
+
+```{r}
+beatAML_mut_leu <- unique(beatAML_mut_leu[,-3])
+```
+
+```{r}
+beatAML_mut <- preDiscrete(beatAML_mut_leu, beatAML_drug_leu)[[1]]
+beatAML_mutdrugs <- preDiscrete(beatAML_mut_leu, beatAML_drug_leu)[[2]]
+```
+
+# gCSI
+```{r}
+load(file = "Output/Steps/R01/gCSI_mut_leu_v1.Rda")
+load(file = "Output/Steps/R01/gCSI_drug_leu_v1.Rda")
+```
+
+```{r}
+gCSI_mut_leu <- unique(gCSI_mut_leu[,-3])
+```
+
+```{r}
+gCSI_mut <- preDiscrete(as.data.frame(gCSI_mut_leu), as.data.frame(gCSI_drug_leu))[[1]]
+gCSI_mutdrugs <- preDiscrete(as.data.frame(gCSI_mut_leu), as.data.frame(gCSI_drug_leu))[[2]]
+```
+
+# FORALL
+```{r}
+load(file = "Output/Steps/R01/FORALL_mut_leu_v1.Rda")
+load(file = "Output/Steps/R01/FORALL_drug_leu_v1.Rda")
+```
+
+```{r}
+FORALL_mut_leu2 <- unique(FORALL_mut_leu[!FORALL_mut_leu$Variant_Classification %in% "Silent", c(1,33,19)])
+colnames(FORALL_mut_leu2) <- c("genes", "cells", "mutation")
+FORALL_mut_leu2$genes_muts <- paste(FORALL_mut_leu2$genes, FORALL_mut_leu2$mutation,
+                                 sep = "_")
+```
+
+```{r}
+FORALL_mut <- preDiscrete(as.data.frame(FORALL_mut_leu2), as.data.frame(FORALL_drug_leu))[[1]]
+FORALL_mutdrugs <- preDiscrete(as.data.frame(FORALL_mut_leu2), as.data.frame(FORALL_drug_leu))[[2]]
+```
+
+# Save
+Each:
+```{r}
+save(gdsc1_mut_re_df,
+     gdsc1_mutgenes_re_df,
+     file = "Output/Steps/R07/gdsc1_mut_re_df.Rda")
+
+save(gdsc2_mut_re_df,
+     gdsc2_mutgenes_re_df,
+     file = "Output/Steps/R07/gdsc2_mut_re_df.Rda")
+
+save(ctrp1_mut_re_df,
+     ctrp1_mutgenes_re_df,
+     file = "Output/Steps/R07/ctrp1_mut_re_df.Rda")
+
+save(ctrp2_mut_re_df,
+     ctrp2_mutgenes_re_df,
+     file = "Output/Steps/R07/ctrp2_mut_re_df.Rda")
+```
+
+Sig:
+```{r}
+save(
+    gdsc1_mut_re_df_sig,
+    gdsc1_mutgenes_re_df_sig,
+    gdsc2_mut_re_df_sig,
+    gdsc2_mutgenes_re_df_sig,
+    ctrp1_mut_re_df_sig,
+    ctrp1_mutgenes_re_df_sig,
+    ctrp2_mut_re_df_sig,
+    ctrp2_mutgenes_re_df_sig,
+    file = "Output/Steps/R07/shiny/mut_sig_all_df.Rda"
+)
+```
+
+shiny plot:
+```{r}
+ctrp2_mutdrugs <- ctrp2_drug
+save(ctrp2_mut,
+     ctrp2_mutdrugs, file = "Output/Steps/R07/shiny/ctrp2_mut_df.Rda")
+
+ctrp1_mutdrugs <- ctrp1_drug
+save(ctrp1_mut,
+     ctrp1_mutdrugs, file = "Output/Steps/R07/shiny/ctrp1_mut_df.Rda")
+
+gdsc1_mutdrugs <- gdsc1_drug
+save(gdsc1_mut,
+     gdsc1_mutdrugs, file = "Output/Steps/R07/shiny/gdsc1_mut_df.Rda")
+
+gdsc2_mutdrugs <- gdsc2_drug
+save(gdsc2_mut,
+     gdsc2_mutdrugs, file = "Output/Steps/R07/shiny/gdsc2_mut_df.Rda")
+
+save(beatAML_mut,
+     beatAML_mutdrugs, file = "Output/Steps/R07/shiny/beatAML_mut_df.Rda")
+
+save(gCSI_mut,
+     gCSI_mutdrugs, file = "Output/Steps/R07/shiny/gCSI_mut_df.Rda")
+
+save(FORALL_mut,
+     FORALL_mutdrugs, file = "Output/Steps/R07/shiny/FORALL_mut_df.Rda")
+```
+
+```{r}
+save(ctrp2_mut,
+     ctrp2_mutdrugs,
+     ctrp1_mut,
+     ctrp1_mutdrugs,
+     gdsc1_mut,
+     gdsc1_mutdrugs,
+     gdsc2_mut,
+     gdsc2_mutdrugs,
+     beatAML_mut,
+     beatAML_mutdrugs,
+     gCSI_mut,
+     gCSI_mutdrugs,
+     FORALL_mut,
+     FORALL_mutdrugs, file = "Output/Steps/R07/shiny/merged/merged_mut_df.Rda"
+     )
+```
+

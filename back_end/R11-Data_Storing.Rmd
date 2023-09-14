@@ -1,0 +1,211 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table",
+                 "RMySQL")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+# Load data
+## Continuous
+```{r}
+load("Output/Steps/R05/shiny/merged/merged_exp_df.Rda")
+load("Output/Steps/R06/shiny/merged/merged_meth_df.Rda")
+load("Output/Steps/R09/shiny/merged/merged_cnv_df.Rda")
+load("Output/Steps/R10/shiny/merged/merged_protein_df.Rda")
+```
+
+## Discrete
+```{r}
+load("Output/Steps/R07/shiny/merged/merged_mut_df.Rda")
+load("Output/Steps/R08/shiny/merged/merged_fusion_df.Rda")
+```
+
+## Omics
+```{r}
+omics_search_CNV <- data.frame(
+  omics = c(colnames(ctrp1_cnv),
+            colnames(ctrp2_cnv),
+            colnames(gdsc1_cnv),
+            colnames(gdsc2_cnv),
+            colnames(gCSI_cnv)
+            ),
+  type = "cnv"
+)
+omics_search_mRNA <- data.frame(
+  omics = c(colnames(ctrp1_exp),
+            colnames(ctrp2_exp),
+            colnames(gdsc1_exp),
+            colnames(gdsc2_exp),
+            colnames(tavor_exp),
+            colnames(beatAML_exp)),
+  type = "mRNA"
+)
+omics_search_meth <- data.frame(
+  omics = c(colnames(ctrp1_meth),
+            colnames(ctrp2_meth)),
+  type = "meth"
+)
+omics_search_protein <- data.frame(
+  omics = c(colnames(ctrp1_protein),
+            colnames(ctrp2_protein),
+            colnames(FORALL_protein)),
+  type = "protein"
+)
+omics_search_genesmut <- data.frame(
+  omics = c(ctrp1_mut$genes,
+            ctrp2_mut$genes,
+            gdsc1_mut$genes,
+            gdsc2_mut$genes,
+            FORALL_mut$genes,
+            gCSI_mut$genes,
+            beatAML_mut$genes
+            ),
+  type = "genes_mutation"
+)
+omics_search_mut <- data.frame(
+  omics = c(ctrp1_mut$genes_muts,
+            ctrp2_mut$genes_muts,
+            gdsc1_mut$genes_muts,
+            gdsc2_mut$genes_muts,
+            FORALL_mut$genes_muts
+            ),
+  type = "mutations"
+)
+omics_search_fusion <- data.frame(
+  omics = c(ctrp1_fusion$fusion,
+            ctrp2_fusion$fusion,
+            FORALL_fusion$fusion
+            ),
+  type = "fusion"
+)
+
+omics_search <- rbind(
+  omics_search_CNV,
+  omics_search_mut,
+  omics_search_genesmut,
+  omics_search_meth,
+  omics_search_protein,
+  omics_search_mRNA,
+  omics_search_fusion
+)
+omics_search <- unique(omics_search)
+```
+
+## Drugs
+```{r}
+drugs_search_CNV <- data.frame(
+  drugs = c(colnames(ctrp1_cnvdrugs),
+            colnames(ctrp2_cnvdrugs),
+            colnames(gdsc1_cnvdrugs),
+            colnames(gdsc2_cnvdrugs),
+            colnames(gCSI_cnvdrugs)),
+  type = "cnv"
+)
+drugs_search_mRNA <- data.frame(
+  drugs = c(colnames(ctrp1_expdrugs),
+            colnames(ctrp2_expdrugs),
+            colnames(gdsc1_expdrugs),
+            colnames(gdsc2_expdrugs),
+            colnames(tavor_expdrugs),
+            colnames(beatAML_expdrugs)),
+  type = "mRNA"
+)
+drugs_search_meth <- data.frame(
+  drugs = c(colnames(ctrp1_methdrugs),
+            colnames(ctrp2_methdrugs)),
+  type = "meth"
+)
+drugs_search_protein <- data.frame(
+  drugs = c(colnames(ctrp1_proteindrugs),
+            colnames(ctrp2_proteindrugs),
+            colnames(FORALL_proteindrugs)),
+  type = "protein"
+)
+drugs_search_genesmut <- data.frame(
+  drugs = c(colnames(ctrp1_mutdrugs),
+            colnames(ctrp2_mutdrugs),
+            colnames(gdsc1_mutdrugs),
+            colnames(gdsc2_mutdrugs),
+            colnames(FORALL_mutdrugs),
+            colnames(gCSI_mutdrugs),
+            colnames(beatAML_mutdrugs)
+            ),
+  type = "genes_mutation"
+)
+drugs_search_mut <- data.frame(
+  drugs = c(colnames(ctrp1_mutdrugs),
+            colnames(ctrp2_mutdrugs),
+            colnames(gdsc1_mutdrugs),
+            colnames(gdsc2_mutdrugs),
+            colnames(FORALL_mutdrugs)
+            ),
+  type = "mutations"
+)
+drugs_search_fusion <- data.frame(
+  drugs = c(colnames(ctrp1_fusiondrugs),
+            colnames(ctrp2_fusiondrugs),
+            colnames(FORALL_fusiondrugs)
+            ),
+  type = "fusion"
+)
+
+drugs_search <- rbind(
+  drugs_search_CNV,
+  drugs_search_mut,
+  drugs_search_genesmut,
+  drugs_search_meth,
+  drugs_search_protein,
+  drugs_search_mRNA,
+  drugs_search_fusion
+)
+drugs_search <- unique(drugs_search)
+# dim(drugs_search)
+```
+
+# Connect Rmysql
+```{r}
+sqlcon <- dbConnect(MySQL(), user = 'root', password = 'qweqwe1232', dbname = 'leukemia_omics_drugs',host = 'localhost')
+```
+
+write to schemas:
+```{r}
+dbWriteTable(sqlcon, "discrete_omics_df", discrete_omics_df, overwrite = TRUE)
+
+dbWriteTable(mysqlconnection, "t_demo2", t_demo, overwrite = TRUE)
+```
+
+```{r}
+dbDisconnect(conn = sqlcon)
+```
+
+
+# Save
+```{r}
+fwrite(discrete_omics_df, 
+       file = "Output/Steps/R11/discrete_omics_df.csv")
+fwrite(continuous_omics_df, 
+       file = "Output/Steps/R11/continuous_omics_df.csv")
+```
+
+save unique omics and drugs:
+```{r}
+drugs_search <- rbind.data.frame(
+  unique(discrete_omics_df[,c(4,6)]),
+  unique(continuous_omics_df[,c(4,6)])
+)
+```
+
+```{r}
+omics_search <- rbind.data.frame(
+  unique(discrete_omics_df[,c(3,6)]),
+  unique(continuous_omics_df[,c(3,6)])
+)
+```
+
+```{r}
+save(omics_search,
+     drugs_search, file = "Output/Steps/R11/shiny/fea_search.Rda")
+```
+
+

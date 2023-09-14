@@ -1,0 +1,166 @@
+```{r library, include=FALSE}
+my_packages <- c("tidyverse", "data.table")
+pacman::p_load(char = my_packages)
+
+tmp <- list()
+```
+
+```{r}
+source("Function.R")
+```
+
+# load data
+```{r}
+load(file = "Output/Steps/R01/ccle_drug_leu_v1.Rda")
+load(file = "Output/Steps/R01/gdsc_drug_leu_v1.Rda")
+```
+
+# Preprocess
+```{r}
+gdsc_anno_leu2 <- gdsc_anno_leu[,-c(2:5,7)]
+colnames(gdsc_anno_leu2) <- c("CellName", "CellType")
+
+ccle_anno_leu2 <- ccle_anno_leu[,-c(1,3:5,7,8)]
+colnames(ccle_anno_leu2) <- c("CellName", "CellType")
+```
+
+```{r}
+gdsc1 <- gdsc_anno_leu2[match(gdsc1_drug_leu$COSMIC_ID, gdsc_anno_leu2$CellName),]
+gdsc1 <- cbind(gdsc1, gdsc1_drug_leu[,-1])
+gdsc1 <- as.data.frame(gdsc1)
+```
+```{r}
+gdsc2 <- gdsc_anno_leu2[match(gdsc2_drug_leu$COSMIC_ID, gdsc_anno_leu2$CellName),]
+gdsc2 <- cbind(gdsc2, gdsc2_drug_leu[,-1])
+gdsc2 <- as.data.frame(gdsc2)
+```
+```{r}
+ctrp1 <- ccle_anno_leu2[match(ctrp1_drug_leu$DepMap_ID, ccle_anno_leu2$CellName),]
+ctrp1 <- cbind(ctrp1, ctrp1_drug_leu[,-1])
+ctrp1 <- as.data.frame(ctrp1)
+```
+```{r}
+ctrp2 <- ccle_anno_leu2[match(ctrp2_drug_leu$DepMap_ID, ccle_anno_leu2$CellName),]
+ctrp2 <- cbind(ctrp2, ctrp2_drug_leu[,-1])
+ctrp2 <- as.data.frame(ctrp2)
+```
+
+```{r}
+table(gdsc1$CellType)
+table(gdsc2$CellType)
+table(ctrp1$CellType)
+table(ctrp2$CellType)
+```
+
+# Significant test
+kruskal test:
+```{r}
+gdsc1_kw <- kruskalDrugsTest(gdsc1)
+gdsc1_kw$dataset <- "gdsc1"
+gdsc2_kw <- kruskalDrugsTest(gdsc2)
+gdsc2_kw$dataset <- "gdsc2"
+# ctrp1_kw <- kruskalDrugsTest(ctrp1)
+ctrp2_kw <- kruskalDrugsTest(ctrp2)
+ctrp2_kw$dataset <- "ctrp2"
+
+# bind all
+sig_kw_df <- rbind(
+  gdsc1_kw,
+  gdsc2_kw,
+  ctrp2_kw
+)
+```
+
+wilcox test:
+```{r, warning=F}
+gdsc1_wc <- wilcoxDrugsTest(gdsc1)
+gdsc1_wc$dataset <- "gdsc1"
+gdsc2_wc <- wilcoxDrugsTest(gdsc2)
+gdsc2_wc$dataset <- "gdsc2"
+# ctrp1_kw <- kruskalDrugsTest(ctrp1)
+ctrp2_wc <- wilcoxDrugsTest(ctrp2)
+ctrp2_wc$dataset <- "ctrp2"
+
+# bind all
+sig_wc_df <- rbind(
+  gdsc1_wc,
+  gdsc2_wc,
+  ctrp2_wc
+)
+sig_wc_df <- sig_wc_df[,c(4,3,1,2,5,6)]
+```
+
+bind wilcox and kruskal results:
+```{r}
+sig_kw_df$Subtype <- NA
+sig_kw_df$FoldChange <- NA
+sig_kw_df <- sig_kw_df[,c(1,5,2,6,3,4)]
+
+sig_kw_df$method <- "kruskal-wallis"
+sig_wc_df$method <- "Wilcoxon"
+sig_df <- rbind(sig_kw_df, sig_wc_df)
+```
+
+# Rank all drugs
+```{r}
+gdsc1_rank_df <- rankDrugsTest(gdsc1)
+gdsc1_rank_df$dataset <- "gdsc1"
+gdsc2_rank_df <- rankDrugsTest(gdsc2)
+gdsc2_rank_df$dataset <- "gdsc2"
+ctrp1_rank_df <- rankDrugsTest(ctrp1)
+ctrp1_rank_df$dataset <- "ctrp1"
+ctrp2_rank_df <- rankDrugsTest(ctrp2)
+ctrp2_rank_df$dataset <- "ctrp2"
+
+drug_rank_df <- rbind(
+  gdsc1_rank_df,
+  gdsc2_rank_df,
+  ctrp1_rank_df,
+  ctrp2_rank_df
+)
+```
+
+
+# Save
+Raw auc:
+```{r}
+save(ctrp1,
+     ctrp2,
+     gdsc1,
+     gdsc2,
+     file = "Output/Steps/R04/shiny/leu_drugs_shiny_v2.Rda")
+```
+
+sig test res:
+```{r}
+# kruskal test
+save(
+  gdsc1_kw,
+  gdsc2_kw,
+  ctrp2_kw,
+  file = "Output/Steps/R04/shiny/leu_drugs_kruskal.Rda"
+)
+
+# wilcox test
+save(
+  gdsc1_wc,
+  gdsc2_wc,
+  ctrp2_wc,
+  file = "Output/Steps/R04/shiny/leu_drugs_wilcox.Rda"
+)
+
+# all
+save(sig_wc_df,
+     sig_kw_df,
+     file = "Output/Steps/R04/shiny/leu_drugs_all.Rda")
+```
+
+drug ranks:
+```{r}
+save(drug_rank_df,
+     file = "Output/Steps/R04/shiny/leu_drug_rank.Rda")
+```
+
+
+
+

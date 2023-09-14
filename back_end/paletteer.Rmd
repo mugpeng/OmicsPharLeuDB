@@ -1,0 +1,13 @@
+```{r}
+paletteer::paletteer_d("ggsci::default_igv")
+```
+
+```{r}
+palettee <- paletteer::palettes_d_names
+```
+
+
+```{r}
+paletteer::paletteer_d("RColorBrewer::Set3")
+```
+
