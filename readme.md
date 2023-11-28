@@ -1,4 +1,4 @@
-Read the paper: 
+Read the paper: [OmicsPharLeuDB: an integrative database for mining pharmacogenomic data in acute lymphoblastic leukemia | bioRxiv](https://www.biorxiv.org/content/10.1101/2023.09.14.557519v1)
 
 website: https://mugpeng.shinyapps.io/leu_web_english_peng_v2/
 
