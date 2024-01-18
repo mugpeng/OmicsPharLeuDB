@@ -1,3 +1,10 @@
+# CAUTION
+A version with a better design, cleaner structure, and pan-cancer data is developed in a new repository: [mugpeng/OmicsPharDB: A database that includes the largest published studies investigating the cancer cell lines to chemical compound treatment, and the association between drug sensitivity and multi-omics.](https://github.com/mugpeng/OmicsPharDB/tree/main#3-features-database-significant-analysis)
+This repository will NOT be updated and maintained anymore. 
+See you in the new version :). Bye.
+Peng, 20240118
+
+# Welcome
 Read the paper: [OmicsPharLeuDB: an integrative database for mining pharmacogenomic data in acute lymphoblastic leukemia | bioRxiv](https://www.biorxiv.org/content/10.1101/2023.09.14.557519v1)
 
 website: https://mugpeng.shinyapps.io/leu_web_english_peng_v2/
